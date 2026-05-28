@@ -1,0 +1,16 @@
+*.pyc
+.coverage
+.tox
+htmlcov
+tags
+build
+dist
+MANIFEST
+*.sublime-workspace
+*.egg-info
+.vscode
+temp
+
+
+
+
