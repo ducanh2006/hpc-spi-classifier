@@ -19,7 +19,8 @@
 * **Level 2 (L2) Cache:** $8 \times 1.25\text{ MB}$ (P-Core) + $2 \times 2\text{ MB}$ (E-Core Cluster)
 * **Level 3 (L3) Cache:** 30 MB (Shared Intel® Smart Cache)
 
-## 2. Memory (RAM)
+## 2. Memory (RAM)\
+*   **Capacity**: 16 GB
 *   **Type:** DDR5 SODIMM (Laptop Form Factor)
 *   **Speed:** 4800 MT/s (MHz)
 *   **Configuration:** 2 Slots Used (Dual Channel Mode Enabled)
@@ -37,4 +38,3 @@
 *   **Adapter:** Killer(R) Wi-Fi 6E AX1675i 160MHz (211NGW)
 *   **Standard:** Wi-Fi 6E (802.11ax)
 *   **Bandwidth:** Up to 160 MHz channel width
-
