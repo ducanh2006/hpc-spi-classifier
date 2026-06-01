@@ -1,5 +1,4 @@
 # System Hardware Specifications
-
 ## 1. Processor (CPU)
 ### Basic Specifications
 * **Model:** Intel Core i7-13700HX (13th Gen)
