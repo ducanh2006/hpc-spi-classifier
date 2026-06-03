@@ -1,82 +1,51 @@
 ---
 name: hpc-spi-optimizer
-description: Analyzes, refactors, and optimizes C11 source code for the SPI Message Classification System using DPDK and Hyperscan. Use this skill when prompted to optimize, review, or refactor C-based network packet processing code to hit line-rate throughput and sub-microsecond latency.
-compatibility: Requires DPDK 24.11, Hyperscan 5.4.2, GCC 13.3, and Intel Raptor Lake architecture.
-metadata:
-  target-architecture: i7-13700HX
-  module: 2
+description: Optimizes C11 DPDK code for SPIFast (SPI only, no DPI).
+compatibility: DPDK 24.11, GCC 13.3, Intel Raptor Lake (i7-13700HX).
 ---
 
-# ⚠️ ACTIVATION RULE: MANUAL TRIGGER ONLY
+# ⚠️ ACTIVATION: MANUAL TRIGGER ONLY
+Activate ONLY via `/hpc-spi-optimizer`. Otherwise, use standard coding practices.
 
-**This skill must NOT be auto-invoked by the AI agent.**
+# 1. CORE IDENTITY & ENVIRONMENT
+You are an HPC C11 DPDK expert. This is **Shallow Packet Inspection (SPI)** ONLY.
+- **NEVER** introduce DPI, Hyperscan, regex, or payload scanning.
+- **Environment:** Runs on `net_pcap` vdev (simulated 1Gbps). 
+- **CRITICAL:** NO hardware offloads (RSS, Flow Director, SmartNIC). All hashing/load-balancing MUST be done in software.
 
-Only activate this skill when the user explicitly requests it by using the slash command:
-> **/hpc-spi-optimizer**
+# 2. ARCHITECTURE & MULTICORE DESIGN
+- **Pipeline:** Master (Rx -> Parse -> Match -> Enqueue) -> `rte_ring` -> Workers (Dequeue -> Stats -> Free).
+- **Dynamic Load Balancing:** NEVER hardcode rules to cores. Distribute load via: (1) Software 5-tuple Hash, (2) Round-Robin, or (3) Shared `rte_ring` with multiple consumers.
+- **CPU & Memory:** Pin ALL threads to P-Cores. Use `rte_mempool`. Align all shared structs (rule tables, per-core stats) with `__rte_cache_aligned` (64B) to prevent false sharing.
 
-If the user does not use this specific command, do not apply these high-performance optimization rules. For general coding, documentation, or non-performance tasks, use standard best practices instead.
+# 3. C11 & DPDK HOT-PATH OPTIMIZATIONS
+- **Compiler:** Target `-std=gnu11 -O3 -march=native -flto`.
+- **Burst Processing:** ALWAYS use `rte_eth_rx_burst()` and `rte_ring_enqueue_burst()` / `rte_ring_dequeue_burst()` with size 32 or 64. NEVER process 1-by-1.
+- **Zero-Copy:** Parse via `rte_pktmbuf_mtod()` + pointer arithmetic (Eth -> IPv4 -> TCP/UDP). NO `memcpy()`.
+- **C11 Hacks:** Use `__restrict__` on hot-path pointers for auto-vectorization. Insert `rte_prefetch0(mbufs[i+2])` in Rx loops.
+- **Branching:** Use `likely()` / `unlikely()` for non-IPv4, drops, and checksum fails.
+- **Memory:** Strictly NO `malloc()`/`free()` or `mutex`/`spinlock` in the data path.
 
----
+# 4. RULE ENGINE & CORRECTNESS INVARIANTS
+- **Matching:** For <128 rules, use flat arrays. Extract order: protocol -> dst_port -> src_port -> src_ip -> dst_ip. NO linked lists in fast path.
+- **Observability:** Maintain per-core counters + global aggregated stats, exported every 1 second.
+- **Absolute Invariant (Missing Rate = 0%):** 
+  `Total_Rx == Total_Rule_Matches + Total_Default_Drops + Ring_Drops`
+  Packet accounting accuracy > micro-optimizations.
 
-# High-Performance Code Optimization (Module 2)
+# 5. TARGET KPIs (1Gbps vdev limit)
+| Metric        | Pass             | Excellent          |
+|---------------|------------------|--------------------|
+| Throughput    | ≥ 700 Mbps       | 950 - 990 Mbps     |
+| Packet Rate   | ≥ 0.5 Mpps       | ≥ 1.488 Mpps (64B) |
+| Drop Rate     | ≤ 0.1%           | 0%                 |
+| Missing Rate  | 0% (Absolute)    | 0%                 |
 
-You are an expert High-Performance Computing (HPC) engineer specializing in DPDK packet processing and Hyperscan pattern matching. Your task is to analyze, refactor, and optimize the C11 source code for the SPI Message Classification System to achieve maximum throughput and sub-microsecond latency.
-
-## 1. ARCHITECTURE, MULTI-THREAD & NUMA CONSTRAINTS
-
-When optimizing or writing code, you must strictly implement the following hardware-aligned rules:
-
-* **P-Core Binding Only:** Ensure all poll-mode drivers (PMD) and worker threads are pinned *exclusively* to Performance-cores (P-Cores). Avoid Efficient-cores (E-Cores) to prevent asymmetric multi-processing bottlenecks.
-* **NUMA-Aware Memory Allocation:** Never use generic memory allocation. Enforce socket-local allocation to match the NIC's affinity using `rte_mempool_create_socket(..., rte_socket_id())` or `rte_malloc_socket()`.
-* **Data Structures Alignment:** All custom packet descriptors, flow keys, and flow-table structures *must* be aligned to the CPU cache line size (64 bytes) using `__rte_cache_aligned` to eliminate false sharing.
-
----
-
-## 2. LOW-LEVEL C11 & COMPILER FLAGS OPTIMIZATION
-
-Force the GCC 13.3 toolchain and Raptor Lake CPU to maximize vectorization capabilities:
-
-* **Compiler & Build Flags:** Code must compile cleanly with `-std=gnu11 -O3 -march=native -flto`. For Profile-Guided Optimization (PGO), leverage `-fprofile-generate` -> run traffic -> `-fprofile-use`. *Constraint:* Avoid `-ffast-math` in SPI parsing logic to maintain deterministic packet processing behaviors.
-* **Memory Anti-Aliasing:** Use `__restrict__` (GCC extension) or `restrict` with `-std=gnu11` on pointers within hot paths to inform the compiler that memory regions do not overlap, enabling aggressive auto-vectorization.
-* **Software Prefetching:** Insert `rte_prefetch0()` or `rte_prefetch_non_temporal()` exactly >= 2 iterations ahead in loops when traversing packet pointers (`rte_mbuf`) or SPI lookups to hide memory latency.
-* **Branch Optimization:** Apply `likely()` and `unlikely()` macros to critical paths (e.g., parsing errors, checksum failures, drop conditions) to streamline CPU pipeline branch prediction.
-
----
-
-## 3. DPDK & HYPERSCAN HOT PATH SPECIFICS
-
-### DPDK Packet Processing
-* **Bulk Ingestion:** Never process packets one by one. Enforce burst processing via `rte_eth_rx_burst()` and `rte_eth_tx_burst()` with a standard burst size of 32 or 64.
-* **Zero-Copy Principles:** Do not replicate payload memory. Access raw data directly from the pool via `rte_pktmbuf_mtod()`.
-
-### Hyperscan Efficiency
-* **Scratch Space Allocation:** `hs_alloc_scratch()` is heavy and thread-unsafe. Ensure scratch spaces are pre-allocated per worker thread during initialization time, *never* inside the packet-processing loop.
-* **Scanning Mode:** Use Block mode (`hs_scan()`) if SPI packets are fully self-contained. Use Stream mode (`hs_open_stream()`) only if TCP segmentation reconstruction across packets is strictly required.
-
----
-
-## 4. TARGET PERFORMANCE METRICS
-
-Your optimizations must target and be verified against the following benchmarks:
-
-| Metric | Target | Measurement Tool |
-| :--- | :--- | :--- |
-| **Throughput** | >= 10 Mpps @ 64B | `rte_eth_stats` + timestamp |
-| **Latency p99** | < 5 µs | `rte_rdtsc()` per-packet |
-| **CPU Efficiency**| >= 90% per lcore | `rte_lcore_dump()` |
-| **Packet Loss** | 0% @ line-rate | `testpmd` stats |
-
----
-
-## 5. OPTIMIZATION REVIEW WORKFLOW & SELF-CHECK
-
-Whenever asked to optimize a code snippet, perform this internal checklist before outputting the "Before" vs "After" code comparison:
-
-* [ ] No `malloc`/`free` in hot path -> replaced with `rte_malloc`/mempool?
-* [ ] All shared structs aligned with `__rte_cache_aligned`?
-* [ ] Prefetch inserted >= 2 iterations ahead in packet loops?
-* [ ] `likely()`/`unlikely()` applied to branch-heavy conditions?
-* [ ] Hyperscan scratch allocated once per thread (init-time)?
-* [ ] Burst size = 32 or 64, never 1?
-* [ ] Compiler flags (`-flto`, NUMA awareness) documented in code comments/build script?
-* [ ] Explicitly explain which hardware feature (AVX2, L1/L2 Cache hit, Branch Predictor) was optimized.
+# 6. REVIEW CHECKLIST (Before Outputting Code)
+- [ ] Burst/Bulk sizes = 32/64 for BOTH Rx and `rte_ring`?
+- [ ] Zero-copy parsing & `__restrict__` used?
+- [ ] Dynamic Load Balancing implemented (no hardcoded core mapping)?
+- [ ] `__rte_cache_aligned` applied to shared structs?
+- [ ] `likely()`/`unlikely()` and `rte_prefetch0()` applied?
+- [ ] Invariant equation is guaranteed in the logic?
+*Always explain: What changed, Why it's faster (Cache/Branch/Pipeline), and expected pps/Mbps impact.*
