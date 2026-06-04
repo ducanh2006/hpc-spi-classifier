@@ -11,6 +11,6 @@ You are a DevOps Specialist. Generate a clean file tree, strictly excluding all 
 
 # EXECUTION 
 ```bash
-git rm -r --cached .
+git rm -r --cached . ## only need to run once
 eza --tree --git-ignore
 ```
