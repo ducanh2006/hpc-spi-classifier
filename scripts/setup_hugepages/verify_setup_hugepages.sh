@@ -1,7 +1,9 @@
 #!/bin/bash
 # ==============================================================================
 # Purpose: Verify DPDK Hugepages allocation and mount status
-# Usage:   ./verify_setup_hugepages.sh
+# Usage:
+#   1. Make execution:  chmod +x scripts/setup_hugepages/verify_setup_hugepages.sh
+#   2. Run from root:   ./scripts/setup_hugepages/verify_setup_hugepages.sh
 # ==============================================================================
 
 set -euo pipefail

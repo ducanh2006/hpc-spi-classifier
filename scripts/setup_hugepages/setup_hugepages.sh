@@ -1,7 +1,9 @@
 #!/bin/bash
 # ==============================================================================
 # Purpose: Configure and allocate 2MB Hugepages for DPDK (2GB total)
-# Usage:   sudo ./setup_hugepages.sh
+# Usage:
+#   1. Make execution:  chmod +x scripts/setup_hugepages/setup_hugepages.sh
+#   2. Run from root:   sudo ./scripts/setup_hugepages/setup_hugepages.sh
 # ==============================================================================
 
 # Ensure the script is run as root
