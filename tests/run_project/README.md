@@ -19,9 +19,13 @@ This directory contains the automation scripts to run the SPIFast DPDK applicati
 3. **Execute the Benchmark Script**
    Because DPDK requires access to system Hugepages to allocate the zero-copy memory pool, the script **must be run with `sudo`**.
 
-   Navigate to the project root directory and run:
+   By default, the script will run each PCAP for 10 seconds. You can override this by passing the desired number of seconds as an argument:
    ```bash
+   # Run with default 10 seconds per file
    sudo ./tests/run_project/run_benchmark.sh
+
+   # Run with 30 seconds per file
+   sudo ./tests/run_project/run_benchmark.sh 30
    ```
 
 ## 📊 Viewing the Results

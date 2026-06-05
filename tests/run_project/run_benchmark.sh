@@ -20,8 +20,10 @@ if [ ! -f "$APP" ]; then
   exit 1
 fi
 
+BENCHMARK_TIME=${1:-20}
+
 echo "===================================================="
-echo "          SPIFast Automated Benchmark               "
+echo "      SPIFast Automated Benchmark (${BENCHMARK_TIME}s per file)      "
 echo "===================================================="
 
 CSV_FILE="$RESULTS_DIR/benchmark_summary.csv"
@@ -42,13 +44,13 @@ for pcap in "$DATA_DIR"/*.pcap; do
     fi
     
     pcap_name=$(basename "$pcap")
-    echo "-> Benchmarking $pcap_name for 10 seconds..."
+    echo "-> Benchmarking $pcap_name for $BENCHMARK_TIME seconds..."
     
     LOG_FILE="$RESULTS_DIR/${pcap_name}_log.txt"
     export LD_LIBRARY_PATH="$PROJECT_ROOT/third_party/dpdk-24.11/build/lib:$PROJECT_ROOT/third_party/dpdk-24.11/build/drivers:$LD_LIBRARY_PATH"
-    # Run application using timeout (10s) and send output to log file
+    # Run application using timeout and send output to log file
     # Ensure Hugepages are active
-    timeout --preserve-status 10 $APP -d "$TMP_DRIVER_DIR" -l 0-4 -n 4 --vdev "net_pcap0,rx_pcap=$pcap,infinite_rx=1" -- -r "$PROJECT_ROOT/spi_rules.conf" > "$LOG_FILE" 2>&1
+    timeout --preserve-status $BENCHMARK_TIME $APP -d "$TMP_DRIVER_DIR" -l 0-4 -n 4 --vdev "net_pcap0,rx_pcap=$pcap,infinite_rx=1" -- -r "$PROJECT_ROOT/spi_rules.conf" > "$LOG_FILE" 2>&1
     
     # Extract the last set of printed stats
     # Output format is:
