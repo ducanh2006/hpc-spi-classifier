@@ -27,6 +27,14 @@ echo "===================================================="
 CSV_FILE="$RESULTS_DIR/benchmark_summary.csv"
 echo "PCAP_File,Throughput_Mbps,Flow_Rate_pps,Master_Drop_Packets,Worker_Drop_Packets" > "$CSV_FILE"
 
+# Copy ONLY required DPDK PMD drivers to a secure directory to bypass EAL 'world-writable' error and avoid duplicate loading
+TMP_DRIVER_DIR="/opt/spifast_dpdk_drivers"
+rm -rf "$TMP_DRIVER_DIR"
+mkdir -p "$TMP_DRIVER_DIR"
+chmod 755 "$TMP_DRIVER_DIR"
+cp "$PROJECT_ROOT/third_party/dpdk-24.11/build/drivers/librte_net_pcap.so" "$TMP_DRIVER_DIR/" 2>/dev/null || true
+cp "$PROJECT_ROOT/third_party/dpdk-24.11/build/drivers/librte_mempool_ring.so" "$TMP_DRIVER_DIR/" 2>/dev/null || true
+
 for pcap in "$DATA_DIR"/*.pcap; do
     if [ ! -f "$pcap" ]; then
         echo "No .pcap files found in $DATA_DIR"
@@ -37,10 +45,10 @@ for pcap in "$DATA_DIR"/*.pcap; do
     echo "-> Benchmarking $pcap_name for 10 seconds..."
     
     LOG_FILE="$RESULTS_DIR/${pcap_name}_log.txt"
-    
+    export LD_LIBRARY_PATH="$PROJECT_ROOT/third_party/dpdk-24.11/build/lib:$PROJECT_ROOT/third_party/dpdk-24.11/build/drivers:$LD_LIBRARY_PATH"
     # Run application using timeout (10s) and send output to log file
     # Ensure Hugepages are active
-    timeout --preserve-status 10 $APP -l 0-4 -n 4 --vdev "net_pcap0,rx_pcap=$pcap,infinite_rx=1" -- -r "$PROJECT_ROOT/spi_rules.conf" > "$LOG_FILE" 2>&1
+    timeout --preserve-status 10 $APP -d "$TMP_DRIVER_DIR" -l 0-4 -n 4 --vdev "net_pcap0,rx_pcap=$pcap,infinite_rx=1" -- -r "$PROJECT_ROOT/spi_rules.conf" > "$LOG_FILE" 2>&1
     
     # Extract the last set of printed stats
     # Output format is:
@@ -49,7 +57,7 @@ for pcap in "$DATA_DIR"/*.pcap; do
     # Worker Rx: A pkts | Worker Drop: B pkts
     
     THROUGHPUT=$(grep "Throughput:" "$LOG_FILE" | tail -n 1 | awk '{print $2}')
-    FLOW_RATE=$(grep "Flow Rate:" "$LOG_FILE" | tail -n 1 | awk '{print $6}')
+    FLOW_RATE=$(grep "Flow Rate:" "$LOG_FILE" | tail -n 1 | awk '{print $7}')
     
     MASTER_DROP=$(grep "Master Drop:" "$LOG_FILE" | tail -n 1 | awk '{print $8}')
     WORKER_DROP=$(grep "Worker Drop:" "$LOG_FILE" | tail -n 1 | awk '{print $8}')
