@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
 
 spi_rule_t g_rules[MAX_RULES];
 uint32_t g_num_rules = 0;
@@ -52,8 +53,28 @@ int matcher_init(const char *rule_file)
 		// Parse protocol
 		rule->tuple.protocol = parse_protocol(proto_str);
 
-		rule->tuple.src_ip = 0; 
-		rule->tuple.dst_ip = 0;
+		// IP parsing
+		if (strcmp(src_ip_str, "ANY") != 0 && strcmp(src_ip_str, "*") != 0) {
+			struct in_addr addr;
+			if (inet_pton(AF_INET, src_ip_str, &addr) == 1) {
+				rule->tuple.src_ip = rte_be_to_cpu_32(addr.s_addr);
+			} else {
+				rule->tuple.src_ip = 0;
+			}
+		} else {
+			rule->tuple.src_ip = 0; 
+		}
+
+		if (strcmp(dst_ip_str, "ANY") != 0 && strcmp(dst_ip_str, "*") != 0) {
+			struct in_addr addr;
+			if (inet_pton(AF_INET, dst_ip_str, &addr) == 1) {
+				rule->tuple.dst_ip = rte_be_to_cpu_32(addr.s_addr);
+			} else {
+				rule->tuple.dst_ip = 0;
+			}
+		} else {
+			rule->tuple.dst_ip = 0;
+		}
 
 		// Port parsing
 		if (strcmp(src_port_str, "*") != 0) {
@@ -76,19 +97,4 @@ int matcher_init(const char *rule_file)
 	fclose(fp);
 	printf("Loaded %u rules from %s\n", g_num_rules, rule_file);
 	return 0;
-}
-
-int match_rule(const five_tuple_t *tuple)
-{
-	for (uint32_t i = 0; i < g_num_rules; i++) {
-		spi_rule_t *rule = &g_rules[i];
-		
-		if (rule->tuple.protocol != 0 && rule->tuple.protocol != tuple->protocol) continue;
-		if (rule->tuple.src_port != 0 && rule->tuple.src_port != tuple->src_port) continue;
-		if (rule->tuple.dst_port != 0 && rule->tuple.dst_port != tuple->dst_port) continue;
-		
-		return (int)i;
-	}
-	
-	return -1;
 }

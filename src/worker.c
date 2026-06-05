@@ -29,6 +29,11 @@ int worker_loop(void *arg)
 		uint64_t local_rule_hits[MAX_RULES] = {0};
 		
 		for (uint16_t i = 0; i < nb_rx; i++) {
+			if (likely(i + 4 < nb_rx)) {
+				rte_prefetch0(bufs[i + 4]);
+				rte_prefetch0(rte_pktmbuf_mtod(bufs[i + 4], void *));
+			}
+
 			struct rte_mbuf *m = bufs[i];
 			w_rx_pkts++;
 			w_rx_bytes += rte_pktmbuf_pkt_len(m);
