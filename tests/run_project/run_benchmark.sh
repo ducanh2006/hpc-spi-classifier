@@ -1,0 +1,72 @@
+#!/bin/bash
+
+# Get directories relative to the script location
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+DATA_DIR="$PROJECT_ROOT/tests/data"
+RESULTS_DIR="$PROJECT_ROOT/tests/results"
+BUILD_DIR="$PROJECT_ROOT/build"
+APP="$BUILD_DIR/spifast"
+
+mkdir -p "$RESULTS_DIR"
+
+if [ "$EUID" -ne 0 ]; then
+  echo "[ERROR] Please run this benchmark script with sudo (e.g., sudo ./tests/run_project/run_benchmark.sh)"
+  exit 1
+fi
+
+if [ ! -f "$APP" ]; then
+  echo "[ERROR] Application not found at $APP. Please build the project first."
+  exit 1
+fi
+
+echo "===================================================="
+echo "          SPIFast Automated Benchmark               "
+echo "===================================================="
+
+CSV_FILE="$RESULTS_DIR/benchmark_summary.csv"
+echo "PCAP_File,Throughput_Mbps,Flow_Rate_pps,Master_Drop_Packets,Worker_Drop_Packets" > "$CSV_FILE"
+
+for pcap in "$DATA_DIR"/*.pcap; do
+    if [ ! -f "$pcap" ]; then
+        echo "No .pcap files found in $DATA_DIR"
+        break
+    fi
+    
+    pcap_name=$(basename "$pcap")
+    echo "-> Benchmarking $pcap_name for 10 seconds..."
+    
+    LOG_FILE="$RESULTS_DIR/${pcap_name}_log.txt"
+    
+    # Run application using timeout (10s) and send output to log file
+    # Ensure Hugepages are active
+    timeout --preserve-status 10 $APP -l 0-4 -n 4 --vdev "net_pcap0,rx_pcap=$pcap,infinite_rx=1" -- -r "$PROJECT_ROOT/spi_rules.conf" > "$LOG_FILE" 2>&1
+    
+    # Extract the last set of printed stats
+    # Output format is:
+    # Throughput: 123.45 Mbps | Flow Rate: 67890 pps
+    # Master Rx: X pkts | Master Drop: Y pkts
+    # Worker Rx: A pkts | Worker Drop: B pkts
+    
+    THROUGHPUT=$(grep "Throughput:" "$LOG_FILE" | tail -n 1 | awk '{print $2}')
+    FLOW_RATE=$(grep "Flow Rate:" "$LOG_FILE" | tail -n 1 | awk '{print $6}')
+    
+    MASTER_DROP=$(grep "Master Drop:" "$LOG_FILE" | tail -n 1 | awk '{print $8}')
+    WORKER_DROP=$(grep "Worker Drop:" "$LOG_FILE" | tail -n 1 | awk '{print $8}')
+    
+    # Fallback to 0 if empty
+    THROUGHPUT=${THROUGHPUT:-0}
+    FLOW_RATE=${FLOW_RATE:-0}
+    MASTER_DROP=${MASTER_DROP:-0}
+    WORKER_DROP=${WORKER_DROP:-0}
+    
+    echo "$pcap_name,$THROUGHPUT,$FLOW_RATE,$MASTER_DROP,$WORKER_DROP" >> "$CSV_FILE"
+    
+    echo "   [Result] Throughput: $THROUGHPUT Mbps | Flow Rate: $FLOW_RATE pps"
+done
+
+echo "===================================================="
+echo "Benchmark complete. Results saved in:"
+echo "  - Summary: $CSV_FILE"
+echo "  - Detailed Logs: $RESULTS_DIR/*_log.txt"
+echo "===================================================="
