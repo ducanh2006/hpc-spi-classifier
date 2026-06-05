@@ -31,7 +31,7 @@ typedef struct {
 	five_tuple_t tuple;
 	uint32_t action_mask;
 	uint64_t hit_count; // Bonus: Statistics of rule match count
-} spi_rule_t;
+} __rte_cache_aligned spi_rule_t;
 
 // Extern declarations for global state
 extern spi_rule_t g_rules[MAX_RULES];

@@ -12,8 +12,12 @@ int master_loop(struct rte_ring *worker_rings[], uint32_t num_workers, uint16_t 
 	
 	printf("Master started on lcore %u\n", rte_lcore_id());
 	
+	uint16_t loop_count = 0;
+	
 	while (1) {
-		stats_print_periodic();
+		if (unlikely((loop_count++ & 0xFFF) == 0)) {
+			stats_print_periodic();
+		}
 		
 		uint16_t nb_rx = rte_eth_rx_burst(port_id, 0, bufs, BURST_SIZE);
 		
@@ -26,6 +30,11 @@ int master_loop(struct rte_ring *worker_rings[], uint32_t num_workers, uint16_t 
 		uint16_t worker_buf_count[MAX_WORKERS] = {0};
 		
 		for (uint16_t i = 0; i < nb_rx; i++) {
+			if (likely(i + 4 < nb_rx)) {
+				rte_prefetch0(bufs[i + 4]);
+				rte_prefetch0(rte_pktmbuf_mtod(bufs[i + 4], void *));
+			}
+
 			struct rte_mbuf *m = bufs[i];
 			total_rx_bytes += rte_pktmbuf_pkt_len(m);
 			
@@ -37,8 +46,8 @@ int master_loop(struct rte_ring *worker_rings[], uint32_t num_workers, uint16_t 
 				// We hash the 5-tuple to preserve flow affinity
 				uint32_t word1 = tuple.src_ip;
 				uint32_t word2 = tuple.dst_ip;
-				uint32_t word3 = ((uint32_t)tuple.src_port) | (((uint32_t)tuple.dst_port) << 16) | (((uint32_t)tuple.protocol) << 8);
-				uint32_t hash = rte_jhash_3words(word1, word2, word3, 0xdeadbeef);
+				uint32_t word3 = ((uint32_t)tuple.src_port) | (((uint32_t)tuple.dst_port) << 16);
+				uint32_t hash = rte_jhash_3words(word1, word2, word3 ^ tuple.protocol, 0xdeadbeef);
 				target_worker = hash % num_workers;
 			} else {
 				// If not parsable, just distribute round robin

@@ -14,7 +14,6 @@ inc = include_directories('src')
 sources = files(
     'src/main.c',
     'src/stats.c',
-    'src/parser.c',
     'src/matcher.c',
     'src/worker.c',
     'src/master.c'
