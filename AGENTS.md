@@ -39,26 +39,26 @@ Build a packet processing application that classifies network traffic based on 5
     * `all_hpc_projects_overview.md`
     * `build_environment_specification.md`
     * `operating_system_specification.md`
-    * `project_specification_english_version.md` - *(Core assignment specifications by mentor but you can modify)*
+    * `project_specification_english_version.md` - **CORE ASSIGNMENT SPECIFICATIONS BY MENTOR BUT YOU CAN MODIFY**.
     * `system_hardware_specifications.md`
 * `scripts/` – Environment, dependencies, and DPDK setup scripts (READ/EXECUTE)
 * `tests/` – Test data and benchmark results (READ/WRITE)
     * `data/` – Contains sample PCAP files for vdev replay.
     * `results/` – Directory for storing performance benchmark outputs.
-* `third_party/` – Pre-compiled DPDK or external libraries (DO NOT MODIFY)
+* `third_party/` – External libraries.
 
 ## Development Boundaries
 
-* ✅ **Always do:**
+*  **Always do:**
     * Follow the pipeline architecture: `rte_eth_rx_burst()` on Master Core -> Extract 5-tuple -> Rule Matcher -> `rte_ring_enqueue()` -> Worker Core `rte_ring_dequeue()` -> `rte_pktmbuf_free()`.
     * Implement **Dynamic Load Balancing** (e.g., Round-Robin, RSS Hash, or Shared Ring) to route packets efficiently to Worker Cores instead of hard-coding rules to specific cores.
     * Write a Statistics function to output converted Mbps, pps, and hit counters every 1 second.
-* ⚠️ **Ask first before:**
+*  **Ask first before:**
     * Modifying `docs/` (specifications are read-only).
     * Changing the parser or first-match algorithm logic.
     * Adding new dependencies (only DPDK is allowed).
     * Altering the predefined rule internal storage structure (e.g., `five_tuple_t` and `spi_rule_t`).
-* 🚫 **Never do:**
+*  **Never do:**
     * Use `malloc`, `free`, `pthread_mutex`, or `printf` in the fast-path worker loops.
     * Modify `third_party/` (DPDK is pre-compiled).
     * Ignore memory cache-line optimization.
