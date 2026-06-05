@@ -71,7 +71,7 @@ typedef struct {
 } spi_rule_t;
 ```
 
-## 4.1 Sample Configuration File (spi_rules.conf)
+## 4.1 Sample Configuration File (spi_rules.conf/ .config)
 
 ```text
 HTTP_TRAFFIC,TCP,*,*,*,80,FORWARD_WORKER_0
@@ -81,6 +81,10 @@ GTPU_TRAFFIC,UDP,*,*,*,2152,FORWARD_WORKER_3
 SSH_BLOCK,TCP,*,*,*,22,DROP
 DEFAULT,*,*,*,*,*,DROP
 ```
+### CRITICAL ARCHITECTURE NOTE:
+* **Action Labels are Examples Only:** Labels like `FORWARD_WORKER_0` are purely illustrative; do NOT hard-code specific protocols or rules to fixed CPU cores.
+* **Mandatory Dynamic Load Balancing:** To meet Excellence KPIs (0% drop, 1.48Mpps), you must implement dynamic packet distribution (e.g., Lock-free Round-Robin, RSS Hash, or Shared Ring) across all active Workers. 
+* **Zero Bottlenecks:** Optimize for maximum CPU cache efficiency and ensure fluid, lock-free mbuf scheduling to eliminate ring congestion.
 
 # 5. Standards & Mandatory Performance Indicators (KPIs)
 

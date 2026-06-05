@@ -72,7 +72,7 @@ typedef struct {
 } spi_rule_t;
 ```
 
-## 4.1 File cấu hình mẫu (spi_rules.conf)
+## 4.1 File cấu hình mẫu (spi_rules.conf/ .config)
 
 ```text
 HTTP_TRAFFIC,TCP,*,*,*,80,FORWARD_WORKER_0
@@ -82,6 +82,11 @@ GTPU_TRAFFIC,UDP,*,*,*,2152,FORWARD_WORKER_3
 SSH_BLOCK,TCP,*,*,*,22,DROP
 DEFAULT,*,*,*,*,*,DROP
 ```
+
+### LƯU Ý QUAN TRỌNG VỀ KIẾN TRÚC:
+* **Nhãn Hành Động Chỉ Là Ví Dụ Minh Họa:** Các nhãn như `FORWARD_WORKER_0` chỉ mang tính chất minh họa; TUYỆT ĐỐI KHÔNG gán cứng (hard-code) các giao thức hoặc quy tắc cố định vào từng lõi CPU cụ thể.
+* **Bắt Buộc Cân Bằng Tải Động:** Để đạt KPI Xuất Sắc (0% drop, 1.48Mpps), bạn phải triển khai cơ chế phân phối gói tin động (ví dụ: Vòng tròn luân phiên lock-free, RSS Hash, hoặc cấu trúc Shared Ring) trên toàn bộ các Worker đang hoạt động.
+* **Không Gây Nghẽn Hệ Thống:** Tối ưu hóa hiệu suất bộ đệm CPU (Cache line) ở mức tối đa và đảm bảo việc điều phối các mbuf diễn ra liên tục, lock-free nhằm xóa bỏ tình trạng nghẽn hàng đợi (ring congestion).
 
 # 5. Tiêu chuẩn & Chỉ số hiệu năng bắt buộc (KPIs)
 
