@@ -1,3 +1,0 @@
-PCAP_File,Throughput_Mbps,Flow_Rate_pps,Master_Drop_Packets,Worker_Drop_Packets
-http.pcap,49054.48,29622272,0,0
-tls13-rfc8446.pcap,57000.59,23592960,0,195640068
