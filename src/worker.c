@@ -13,7 +13,6 @@ int worker_loop(void *arg)
 	uint32_t w_id = p->worker_id;
 	
 	struct rte_mbuf *bufs[BURST_SIZE];
-	struct rte_mbuf *free_bufs[BURST_SIZE];
 	
 	printf("Worker %u started on lcore %u\n", w_id, rte_lcore_id());
 	
@@ -22,7 +21,6 @@ int worker_loop(void *arg)
 		
 		if (unlikely(nb_rx == 0)) continue;
 		
-		uint16_t free_idx = 0;
 		uint64_t w_rx_pkts = 0;
 		uint64_t w_rx_bytes = 0;
 		uint64_t w_drop_pkts = 0;
@@ -55,9 +53,6 @@ int worker_loop(void *arg)
 				// Not IPv4/TCP/UDP
 				w_drop_pkts++;
 			}
-			
-			// Accumulate for batch freeing
-			free_bufs[free_idx++] = m;
 		}
 		
 		// Update stats
@@ -69,9 +64,7 @@ int worker_loop(void *arg)
 		}
 		
 		// Batching Memory Free
-		if (likely(free_idx > 0)) {
-			rte_pktmbuf_free_bulk(free_bufs, free_idx);
-		}
+		rte_pktmbuf_free_bulk(bufs, nb_rx);
 	}
 	
 	return 0;
