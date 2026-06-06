@@ -1,0 +1,39 @@
+        +-------------------------------------------------------+
+        |             PCAP FILE (net_pcap vdev)                 |
+        |  - Cyclically loads packet bytes into Hugepage mbufs  |
+        +-------------------------------------------------------+
+                                    |
+                                    |   rte_eth_rx_burst()  
+                                    v      
++-------------------------------------------------------------------------+
+|                         MASTER CORE (lcore 0)                           |
+|                                                                         |
+|  1. Parse Headers: parse_five_tuple(m) -> Eth / IPv4 / TCP-UDP          |
+|  2. Calculate Flow ID: rte_jhash_3words(ip_src, ip_dst, ports, jinit)   |
+|  3. Mapping Core: target_worker = hash_val % num_workers                |
+|  4. Batch Enqueue: rte_ring_enqueue_bulk(rings[target_worker], ...)     |
++-------------------------------------------------------------------------+
+          |                      |                      |
+          | (Worker 0 Ring)      | (Worker 1 Ring)      | (Worker N Ring)
+          v                      v                      v
+    +-----------+          +-----------+          +-----------+
+    | rte_ring  |          | rte_ring  |          | rte_ring  |
+    | (Lockless)|          | (Lockless)|          | (Lockless)|
+    +-----------+          +-----------+          +-----------+
+          |                      |                      |
+ rte_ring_dequeue_bulk()  rte_ring_dequeue_bulk()  rte_ring_dequeue_bulk()
+          v                      v                      v
++-------------------+  +-------------------+  +-------------------+
+|   WORKER CORE 0   |  |   WORKER CORE 1   |  |   WORKER CORE N   |
+|                   |  |                   |  |                   |
+| 1. RE-PARSE (!!!) |  | 1. RE-PARSE (!!!) |  | 1. RE-PARSE (!!!) |
+|    parse_five_    |  |    parse_five_    |  |    parse_five_    |
+|    tuple(m)       |  |    tuple(m)       |  |    tuple(m)       |
+| 2. Linear Match:  |  | 2. Linear Match:  |  | 2. Linear Match:  |
+|    match_rule()   |  |    match_rule()   |  |    match_rule()   |
+|    O(N) search    |  |    O(N) search    |  |    O(N) search    |
+| 3. Stats Update   |  | 3. Stats Update   |  | 3. Stats Update   |
+| 4. Free Memory:   |  | 4. Free Memory:   |  | 4. Free Memory:   |
+|    rte_pktmbuf_   |  |    rte_pktmbuf_   |  |    rte_pktmbuf_   |
+|    free_bulk()    |  |    free_bulk()    |  |    free_bulk()    |
++-------------------+  +-------------------+  +-------------------+
