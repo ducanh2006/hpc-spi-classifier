@@ -57,7 +57,7 @@ int matcher_init(const char *rule_file)
 		if (strcmp(src_ip_str, "ANY") != 0 && strcmp(src_ip_str, "*") != 0) {
 			struct in_addr addr;
 			if (inet_pton(AF_INET, src_ip_str, &addr) == 1) {
-				rule->tuple.src_ip = rte_be_to_cpu_32(addr.s_addr);
+				rule->tuple.src_ip = addr.s_addr;
 			} else {
 				rule->tuple.src_ip = 0;
 			}
@@ -68,7 +68,7 @@ int matcher_init(const char *rule_file)
 		if (strcmp(dst_ip_str, "ANY") != 0 && strcmp(dst_ip_str, "*") != 0) {
 			struct in_addr addr;
 			if (inet_pton(AF_INET, dst_ip_str, &addr) == 1) {
-				rule->tuple.dst_ip = rte_be_to_cpu_32(addr.s_addr);
+				rule->tuple.dst_ip = addr.s_addr;
 			} else {
 				rule->tuple.dst_ip = 0;
 			}
@@ -78,10 +78,10 @@ int matcher_init(const char *rule_file)
 
 		// Port parsing
 		if (strcmp(src_port_str, "*") != 0) {
-			rule->tuple.src_port = atoi(src_port_str);
+			rule->tuple.src_port = rte_cpu_to_be_16(atoi(src_port_str));
 		}
 		if (strcmp(dst_port_str, "*") != 0) {
-			rule->tuple.dst_port = atoi(dst_port_str);
+			rule->tuple.dst_port = rte_cpu_to_be_16(atoi(dst_port_str));
 		}
 
 		// Action parsing

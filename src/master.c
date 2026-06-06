@@ -42,16 +42,13 @@ int master_loop(struct rte_ring *worker_rings[], uint32_t num_workers, uint16_t 
 			uint32_t target_worker = 0;
 			
 			if (likely(parse_five_tuple(m, &tuple))) {
-				// Software RSS Hashing
-				// We hash the 5-tuple to preserve flow affinity
-				uint32_t word1 = tuple.src_ip;
-				uint32_t word2 = tuple.dst_ip;
-				uint32_t word3 = ((uint32_t)tuple.src_port) | (((uint32_t)tuple.dst_port) << 16);
-				uint32_t hash = rte_jhash_3words(word1, word2, word3 ^ tuple.protocol, 0xdeadbeef);
-				target_worker = hash % num_workers;
+				uint32_t hash = tuple.src_ip ^ tuple.dst_ip ^ ((uint32_t)tuple.src_port << 16) ^ tuple.dst_port ^ tuple.protocol;
+				hash ^= (hash >> 16);
+				hash ^= (hash >> 8);
+				target_worker = hash & (num_workers - 1); // Fast modulo for power of 2
 			} else {
 				// If not parsable, just distribute round robin
-				target_worker = i % num_workers;
+				target_worker = i & (num_workers - 1);
 			}
 			
 			worker_bufs[target_worker][worker_buf_count[target_worker]++] = m;

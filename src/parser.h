@@ -31,8 +31,8 @@ static inline __attribute__((always_inline)) bool parse_five_tuple(struct rte_mb
 	if (likely(ether_type == rte_cpu_to_be_16(RTE_ETHER_TYPE_IPV4))) {
 		ip_hdr = (struct rte_ipv4_hdr *)((uint8_t *)eth_hdr + l3_offset);
 		
-		tuple->src_ip = rte_be_to_cpu_32(ip_hdr->src_addr);
-		tuple->dst_ip = rte_be_to_cpu_32(ip_hdr->dst_addr);
+		tuple->src_ip = ip_hdr->src_addr;
+		tuple->dst_ip = ip_hdr->dst_addr;
 		tuple->protocol = ip_hdr->next_proto_id;
 		
 		uint16_t ip_hlen = (ip_hdr->version_ihl & RTE_IPV4_HDR_IHL_MASK) * RTE_IPV4_IHL_MULTIPLIER;
@@ -40,13 +40,13 @@ static inline __attribute__((always_inline)) bool parse_five_tuple(struct rte_mb
 		
 		if (tuple->protocol == IPPROTO_TCP) {
 			struct rte_tcp_hdr *tcp_hdr = (struct rte_tcp_hdr *)((uint8_t *)eth_hdr + l4_offset);
-			tuple->src_port = rte_be_to_cpu_16(tcp_hdr->src_port);
-			tuple->dst_port = rte_be_to_cpu_16(tcp_hdr->dst_port);
+			tuple->src_port = tcp_hdr->src_port;
+			tuple->dst_port = tcp_hdr->dst_port;
 			return true;
 		} else if (tuple->protocol == IPPROTO_UDP) {
 			struct rte_udp_hdr *udp_hdr = (struct rte_udp_hdr *)((uint8_t *)eth_hdr + l4_offset);
-			tuple->src_port = rte_be_to_cpu_16(udp_hdr->src_port);
-			tuple->dst_port = rte_be_to_cpu_16(udp_hdr->dst_port);
+			tuple->src_port = udp_hdr->src_port;
+			tuple->dst_port = udp_hdr->dst_port;
 			return true;
 		}
 	}

@@ -12,6 +12,9 @@ This directory contains the automation scripts to run the SPIFast DPDK applicati
 
 1. **Ensure the Project is Built**
    Make sure you have compiled the project successfully using Meson and Ninja. The executable `spifast` must exist in the `build/` directory at the project root.
+   ```bash
+   ninja -C build
+   ```
 
 2. **Check Your Test Data**
    Ensure your `.pcap` files (e.g., `http.pcap`, `tls13-rfc8446.pcap`) are inside the `tests/data/` folder.
