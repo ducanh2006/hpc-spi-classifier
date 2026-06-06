@@ -1,4 +1,3 @@
 third_party/*
 tests/data/*
 tests/results/*
-tests/results/benchmark_summary.csv
