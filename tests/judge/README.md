@@ -22,7 +22,7 @@ This directory contains the automation scripts to run the SPIFast DPDK applicati
 
 3. **Make Scripts Executable**
    ```bash
-   chmod +x tests/run_project/*.sh
+   chmod +x tests/judge/*.sh
    ```
 
 4. **Execute the Benchmark Script**
@@ -30,19 +30,19 @@ This directory contains the automation scripts to run the SPIFast DPDK applicati
    
    ```bash
    # For small pcaps (<8K packets):
-   sudo ./tests/run_project/run_benchmark_native.sh
+   sudo ./tests/judge/run_benchmark_native.sh
    
    # For large pcaps (e.g., 1M+ packets):
-   sudo ./tests/run_project/run_benchmark_tcpreplay.sh
+   sudo ./tests/judge/run_benchmark_tcpreplay.sh
    ```
 
    By default, the scripts will run each PCAP for 20 seconds. You can override this by passing the desired number of seconds as an argument:
    ```bash
    # Run with default 20 seconds per file
-   sudo ./tests/run_project/run_benchmark_tcpreplay.sh
+   sudo ./tests/judge/run_benchmark_native.sh
 
    # Run with 30 seconds per file
-   sudo ./tests/run_project/run_benchmark_tcpreplay.sh 30
+   sudo ./tests/judge/run_benchmark_tcpreplay.sh 30
    ```
 
 ## 📊 Viewing the Results
