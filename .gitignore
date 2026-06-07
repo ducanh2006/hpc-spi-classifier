@@ -1,3 +1,5 @@
 third_party/*
 tests/data/*
 tests/results/*
+venv/*
+*.txt

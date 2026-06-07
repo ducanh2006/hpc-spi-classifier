@@ -49,7 +49,7 @@ def check_correctness(expected_csv_path, actual_csv_path):
     accuracy = (matched / total_packets) * 100
 
     print("====================================================")
-    print("      Online Judge: Correctness Evaluation          ")
+    print("          Correctness Evaluation                    ")
     print("====================================================")
     print(f"Total Packets Checked: {total_packets}")
     print(f"Matched: {matched}")

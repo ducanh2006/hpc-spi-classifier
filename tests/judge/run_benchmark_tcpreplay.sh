@@ -3,7 +3,7 @@
 # Get directories relative to the script location
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-DATA_DIR="$PROJECT_ROOT/tests/data"
+DATA_DIR="$PROJECT_ROOT/tests/data/pcap"
 RESULTS_DIR="$PROJECT_ROOT/tests/results"
 BUILD_DIR="$PROJECT_ROOT/build"
 APP="$BUILD_DIR/spifast"
@@ -48,9 +48,22 @@ for pcap in "$DATA_DIR"/*.pcap; do
     
     LOG_FILE="$RESULTS_DIR/${pcap_name}_log.txt"
     export LD_LIBRARY_PATH="$PROJECT_ROOT/third_party/dpdk-24.11/build/lib:$PROJECT_ROOT/third_party/dpdk-24.11/build/drivers:$LD_LIBRARY_PATH"
+    # Set up veth pair for tcpreplay
+    ip link add veth0 type veth peer name veth1 2>/dev/null || true
+    ip link set veth0 up
+    ip link set veth1 up
+    
+    # Run tcpreplay in the background, looping infinitely at top speed
+    tcpreplay -t --loop=0 -i veth1 "$pcap" > /dev/null 2>&1 &
+    TCPREPLAY_PID=$!
+    
     # Run application using timeout and send output to log file
     # Ensure Hugepages are active
-    timeout --preserve-status $BENCHMARK_TIME $APP -d "$TMP_DRIVER_DIR" -l 0-4 -n 4 --vdev "net_pcap0,rx_pcap=$pcap,infinite_rx=1" -- -r "$PROJECT_ROOT/spi_rules.conf" > "$LOG_FILE" 2>&1
+    timeout --preserve-status $BENCHMARK_TIME $APP -d "$TMP_DRIVER_DIR" -l 0-4 -n 4 --vdev "net_pcap0,rx_iface=veth0" -- -r "$PROJECT_ROOT/spi_rules.conf" > "$LOG_FILE" 2>&1
+    
+    # Cleanup veth and tcpreplay
+    kill -9 $TCPREPLAY_PID 2>/dev/null
+    ip link delete veth0 2>/dev/null
     
     # Extract the last set of printed stats
     # Output format is:
@@ -58,8 +71,8 @@ for pcap in "$DATA_DIR"/*.pcap; do
     # Master Rx: X pkts | Master Drop: Y pkts
     # Worker Rx: A pkts | Worker Drop: B pkts
     
-    THROUGHPUT=$(grep "Throughput:" "$LOG_FILE" | tail -n 1 | awk '{print $2}')
-    FLOW_RATE=$(grep "Flow Rate:" "$LOG_FILE" | tail -n 1 | awk '{print $7}')
+    THROUGHPUT=$(grep "Throughput:" "$LOG_FILE" | awk '{print $2}' | sort -nr | head -n 1)
+    FLOW_RATE=$(grep "Flow Rate:" "$LOG_FILE" | awk '{print $7}' | sort -nr | head -n 1)
     
     MASTER_DROP=$(grep "Master Drop:" "$LOG_FILE" | tail -n 1 | awk '{print $8}')
     WORKER_DROP=$(grep "Worker Drop:" "$LOG_FILE" | tail -n 1 | awk '{print $8}')
