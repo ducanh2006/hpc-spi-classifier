@@ -10,7 +10,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
-DATA_DIR="${PROJECT_ROOT}/tests/data"
+DATA_DIR="${PROJECT_ROOT}/tests/data/pcap"
 
 # Using raw links from Wireshark's official GitLab repository
 GITLAB_RAW_BASE="https://gitlab.com/wireshark/wireshark/-/raw/master/test/captures/"
