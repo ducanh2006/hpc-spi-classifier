@@ -1,9 +1,5 @@
 third_party/*
 tests/data/*
-<<<<<<< HEAD
 tests/results/*
 venv/*
 *.txt
-=======
-tests/results/*
->>>>>>> d91a3cf (chore: remove benchmark_summary.csv from gitignore)
