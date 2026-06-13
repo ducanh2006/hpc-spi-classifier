@@ -25,24 +25,30 @@ This directory contains the automation scripts to run the SPIFast DPDK applicati
    chmod +x tests/judge/*.sh
    ```
 
-4. **Execute the Benchmark Script**
-   Because DPDK requires access to system Hugepages to allocate the zero-copy memory pool, the scripts **must be run with `sudo`**.
-   
+4. **Configure Hugepages (Required after every reboot)**
+   DPDK requires Hugepages to allocate its zero-copy memory pool. This configuration is lost upon system reboot, so you must allocate them before running benchmarks.
    ```bash
-   # For small pcaps (<8K packets):
-   sudo ./tests/judge/run_benchmark_native.sh
-   
-   # For large pcaps (e.g., 1M+ packets):
-   sudo ./tests/judge/run_benchmark_tcpreplay.sh
+   chmod +x scripts/setup_hugepages/*.sh
+   sudo ./scripts/setup_hugepages/setup_hugepages.sh
    ```
+   *(To verify the allocation, you can optionally run `./scripts/setup_hugepages/verify_setup_hugepages.sh`)*
 
-   By default, the scripts will run each PCAP for 20 seconds. You can override this by passing the desired number of seconds as an argument:
+5. **Execute the Benchmark Script**
+   Because DPDK requires access to system Hugepages to allocate the zero-copy memory pool, the scripts **must be run with `sudo`**.
+
+   Choose the appropriate script based on your PCAP dataset size:
+
+   > [!NOTE]
+   > **Native vs TCPReplay Benchmarking**
+   > - **`run_benchmark_native.sh` (Native Mode):** Loads all packets directly into DPDK's `mbuf_pool` memory upfront and loops them internally. This achieves the highest performance with zero overhead, but **will crash on large PCAPs** (typically > 8,192 packets) because it runs out of memory pool space.
+   > - **`run_benchmark_tcpreplay.sh` (TCPReplay Mode):** Streams packets into DPDK continuously over a virtual network interface (`veth`). This bypasses DPDK memory limits and is **required for large PCAPs** (e.g., 1M+ packets), though `tcpreplay` introduces slight system overhead.
+   
    ```bash
-   # Run with default 20 seconds per file
+   # 🟢 For small pcaps (<8K packets) - Zero Overhead:
    sudo ./tests/judge/run_benchmark_native.sh
-
-   # Run with 30 seconds per file
-   sudo ./tests/judge/run_benchmark_tcpreplay.sh 30
+   
+   # 🔵 For large pcaps (1M+ packets) - Streaming Mode:
+   sudo ./tests/judge/run_benchmark_tcpreplay.sh
    ```
 
 ## 📊 Viewing the Results
