@@ -64,12 +64,25 @@ void stats_print_periodic(void)
 	double pps  = (double)diff_pkts;
 	double mbps = (double)diff_bytes * 8.0 / 1000000.0;
 
+	double drop_rate = 0.0;
+	if (total_rx_pkts > 0) {
+		drop_rate = ((double)total_drop / total_rx_pkts) * 100.0;
+	}
+
+	int64_t missing_pkts = (int64_t)total_rx_pkts - ((int64_t)total_drop + (int64_t)worker_rx_pkts);
+	double missing_rate = 0.0;
+	if (total_rx_pkts > 0) {
+		missing_rate = ((double)missing_pkts / total_rx_pkts) * 100.0;
+	}
+
 	printf("\n====================================================\n");
 	printf("Throughput: %.2f Mbps | Flow Rate: %.0f pps\n", mbps, pps);
 	printf("Master Rx: %lu pkts | Master Drop: %lu pkts\n",
 	       total_rx_pkts, total_drop);
 	printf("Worker Rx: %lu pkts | Worker Drop: %lu pkts\n",
 	       worker_rx_pkts, worker_drop_pkts);
+	printf("Packet Drop Rate: %.4f%% | Missing Packet Rate: %.4f%%\n",
+	       drop_rate, missing_rate);
 
 	printf("--- Rule Hits ---\n");
 	for (uint32_t i = 0; i < num_rules; i++)
