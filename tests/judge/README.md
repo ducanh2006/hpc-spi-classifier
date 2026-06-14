@@ -51,6 +51,24 @@ This directory contains the automation scripts to run the SPIFast DPDK applicati
    sudo ./tests/judge/run_benchmark_tcpreplay.sh
    ```
 
+6. **Optional. Run the project directly**
+```bash
+# 1. Make scripts executable
+chmod +x tests/judge/run_project_native.sh tests/judge/run_project_tcpreplay.sh
+
+# 2. Run native mode (read directly from PCAP in infinite loop)
+sudo ./tests/judge/run_project_native.sh
+
+# 3. Run tcpreplay mode (create veth and use tcpreplay to replay packets)
+sudo ./tests/judge/run_project_tcpreplay.sh
+
+```
+
+7. **Change Rule**
+```bash
+sudo ./build/spi_cli reload_rules ./spi_rules.conf
+```
+
 ## 📊 Viewing the Results
 
 Once the script finishes executing, check the `tests/results/` directory:
