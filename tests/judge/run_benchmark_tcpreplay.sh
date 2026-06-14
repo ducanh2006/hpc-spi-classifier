@@ -71,8 +71,8 @@ for pcap in "$DATA_DIR"/*.pcap; do
     # Master Rx: X pkts | Master Drop: Y pkts
     # Worker Rx: A pkts | Worker Drop: B pkts
     
-    THROUGHPUT=$(grep "Throughput:" "$LOG_FILE" | awk '{print $2}' | sort -nr | head -n 1)
-    FLOW_RATE=$(grep "Flow Rate:" "$LOG_FILE" | awk '{print $7}' | sort -nr | head -n 1)
+    THROUGHPUT=$(grep "Throughput:" "$LOG_FILE" | awk '{sum+=$2; count++} END {if (count > 0) printf "%.2f", sum/count; else print "0.00"}')
+    FLOW_RATE=$(grep "Flow Rate:" "$LOG_FILE" | awk '{sum+=$7; count++} END {if (count > 0) printf "%.0f", sum/count; else print "0"}')
     
     MASTER_DROP=$(grep "Master Drop:" "$LOG_FILE" | tail -n 1 | awk '{print $8}')
     WORKER_DROP=$(grep "Worker Drop:" "$LOG_FILE" | tail -n 1 | awk '{print $8}')
