@@ -51,9 +51,9 @@ int worker_loop(void *arg)
 			w_rx_pkts++;
 			w_rx_bytes += rte_pktmbuf_pkt_len(m);
 
-			five_tuple_t tuple;
-			if (likely(parse_five_tuple(m, &tuple))) {
-				int rule_idx = match_rule(&tuple);
+			pkt_metadata_t *meta = (pkt_metadata_t *)rte_mbuf_to_priv(m);
+			if (likely(meta->is_valid)) {
+				int rule_idx = match_rule(&meta->tuple);
 				if (rule_idx >= 0) {
 					local_rule_hits[rule_idx]++;
 

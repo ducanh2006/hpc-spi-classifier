@@ -65,7 +65,8 @@ int main(int argc, char **argv)
 
 	struct rte_mempool *mbuf_pool =
 		rte_pktmbuf_pool_create("MBUF_POOL", NUM_MBUFS,
-					MBUF_CACHE_SIZE, 0,
+					MBUF_CACHE_SIZE,
+					RTE_ALIGN(sizeof(pkt_metadata_t), RTE_MBUF_PRIV_ALIGN),
 					RTE_MBUF_DEFAULT_BUF_SIZE,
 					rte_socket_id());
 	if (mbuf_pool == NULL)

@@ -32,6 +32,12 @@ typedef struct {
 } five_tuple_t;
 
 typedef struct {
+	five_tuple_t tuple;
+	uint8_t is_valid;
+} pkt_metadata_t;
+
+
+typedef struct {
 	char         name[64];
 	five_tuple_t tuple;
 	uint32_t     action_mask;

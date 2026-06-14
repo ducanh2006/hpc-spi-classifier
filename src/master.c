@@ -38,15 +38,17 @@ int master_loop(struct rte_ring *worker_rings[], uint32_t num_workers, uint16_t 
 			struct rte_mbuf *m = bufs[i];
 			total_rx_bytes += rte_pktmbuf_pkt_len(m);
 			
-			five_tuple_t tuple;
+			pkt_metadata_t *meta = (pkt_metadata_t *)rte_mbuf_to_priv(m);
 			uint32_t target_worker = 0;
 			
-			if (likely(parse_five_tuple(m, &tuple))) {
-				uint32_t hash = tuple.src_ip ^ tuple.dst_ip ^ ((uint32_t)tuple.src_port << 16) ^ tuple.dst_port ^ tuple.protocol;
+			if (likely(parse_five_tuple(m, &meta->tuple))) {
+				meta->is_valid = 1;
+				uint32_t hash = meta->tuple.src_ip ^ meta->tuple.dst_ip ^ ((uint32_t)meta->tuple.src_port << 16) ^ meta->tuple.dst_port ^ meta->tuple.protocol;
 				hash ^= (hash >> 16);
 				hash ^= (hash >> 8);
 				target_worker = hash & (num_workers - 1); // Fast modulo for power of 2
 			} else {
+				meta->is_valid = 0;
 				// If not parsable, just distribute round robin
 				target_worker = i & (num_workers - 1);
 			}
