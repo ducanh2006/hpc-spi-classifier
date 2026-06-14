@@ -39,8 +39,8 @@ for pcap in "$DATA_DIR"/*.pcap; do
     tcpreplay -t --loop=0 -i veth1 "$pcap" > /dev/null 2>&1 &
     TCPREPLAY_PID=$!
     
-    MAX_THROUGHPUT=0
-    MAX_FLOW_RATE=0
+    SUM_THROUGHPUT=0
+    SUM_FLOW_RATE=0
     
     # Wait a bit for tcpreplay to ramp up
     sleep 1
@@ -64,20 +64,19 @@ for pcap in "$DATA_DIR"/*.pcap; do
         # Calculate Mbps
         mbps=$(echo "scale=2; $wire_bytes_per_sec * 8 / 1000000" | bc -l)
         
-        if (( $(echo "$mbps > $MAX_THROUGHPUT" | bc -l) )); then
-            MAX_THROUGHPUT=$mbps
-        fi
-        
-        if (( pkts_per_sec > MAX_FLOW_RATE )); then
-            MAX_FLOW_RATE=$pkts_per_sec
-        fi
+        SUM_THROUGHPUT=$(echo "$SUM_THROUGHPUT + $mbps" | bc -l)
+        SUM_FLOW_RATE=$((SUM_FLOW_RATE + pkts_per_sec))
     done
+    
+    # Calculate averages
+    AVG_THROUGHPUT=$(echo "scale=2; $SUM_THROUGHPUT / $BENCHMARK_TIME" | bc -l)
+    AVG_FLOW_RATE=$((SUM_FLOW_RATE / BENCHMARK_TIME))
     
     # Cleanup veth and tcpreplay
     kill -9 $TCPREPLAY_PID 2>/dev/null || true
     ip link delete veth0 2>/dev/null || true
     
-    echo "   [Result] Max Throughput: $MAX_THROUGHPUT Mbps | Max Flow Rate: $MAX_FLOW_RATE pps"
+    echo "   [Result] Avg Throughput: $AVG_THROUGHPUT Mbps | Avg Flow Rate: $AVG_FLOW_RATE pps"
 done
 
 echo "================================================================================"
