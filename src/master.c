@@ -9,6 +9,7 @@
 int master_loop(struct rte_ring *worker_rings[], uint32_t num_workers, uint16_t port_id)
 {
 	struct rte_mbuf *bufs[BURST_SIZE];
+	uint32_t current_worker = 0;
 	
 	printf("Master started on lcore %u\n", rte_lcore_id());
 	
@@ -24,53 +25,29 @@ int master_loop(struct rte_ring *worker_rings[], uint32_t num_workers, uint16_t 
 		if (unlikely(nb_rx == 0)) continue;
 		
 		uint64_t total_rx_bytes = 0;
-		
-		// Array to accumulate packets for each worker
-		struct rte_mbuf *worker_bufs[MAX_WORKERS][BURST_SIZE];
-		uint16_t worker_buf_count[MAX_WORKERS] = {0};
-		
 		for (uint16_t i = 0; i < nb_rx; i++) {
-			if (likely(i + 4 < nb_rx)) {
-				rte_prefetch0(bufs[i + 4]);
-				rte_prefetch0(rte_pktmbuf_mtod(bufs[i + 4], void *));
-			}
-
-			struct rte_mbuf *m = bufs[i];
-			total_rx_bytes += rte_pktmbuf_pkt_len(m);
-			
-			five_tuple_t tuple;
-			uint32_t target_worker = 0;
-			
-			if (likely(parse_five_tuple(m, &tuple))) {
-				uint32_t hash = tuple.src_ip ^ tuple.dst_ip ^ ((uint32_t)tuple.src_port << 16) ^ tuple.dst_port ^ tuple.protocol;
-				hash ^= (hash >> 16);
-				hash ^= (hash >> 8);
-				target_worker = hash & (num_workers - 1); // Fast modulo for power of 2
-			} else {
-				// If not parsable, just distribute round robin
-				target_worker = i & (num_workers - 1);
-			}
-			
-			worker_bufs[target_worker][worker_buf_count[target_worker]++] = m;
+			total_rx_bytes += rte_pktmbuf_pkt_len(bufs[i]);
 		}
 		
 		g_master_rx_packets += nb_rx;
 		g_master_rx_bytes += total_rx_bytes;
 		
-		// Enqueue to workers
-		for (uint32_t w = 0; w < num_workers; w++) {
-			if (worker_buf_count[w] > 0) {
-				uint16_t nb_tx = rte_ring_enqueue_burst(worker_rings[w], 
-					(void * const *)worker_bufs[w], worker_buf_count[w], NULL);
-				
-				if (unlikely(nb_tx < worker_buf_count[w])) {
-					uint16_t drop_count = worker_buf_count[w] - nb_tx;
-					g_master_dropped_packets += drop_count;
-					
-					// Free dropped packets
-					rte_pktmbuf_free_bulk(&worker_bufs[w][nb_tx], drop_count);
-				}
-			}
+		// Enqueue the entire burst to the current worker ring
+		uint16_t nb_tx = rte_ring_enqueue_burst(worker_rings[current_worker], 
+			(void * const *)bufs, nb_rx, NULL);
+		
+		if (unlikely(nb_tx < nb_rx)) {
+			uint16_t drop_count = nb_rx - nb_tx;
+			g_master_dropped_packets += drop_count;
+			
+			// Free dropped packets
+			rte_pktmbuf_free_bulk(&bufs[nb_tx], drop_count);
+		}
+		
+		// Rotate to the next worker
+		current_worker++;
+		if (unlikely(current_worker >= num_workers)) {
+			current_worker = 0;
 		}
 	}
 	
