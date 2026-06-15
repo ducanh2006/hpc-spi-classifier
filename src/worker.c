@@ -39,6 +39,9 @@ int worker_loop(void *arg)
 		const spi_rule_t *rules =
 			atomic_load_explicit(&g_active_rules,
 					     memory_order_acquire);
+		uint32_t num_rules =
+			atomic_load_explicit(&g_active_num_rules,
+					     memory_order_acquire);
 
 		for (uint16_t i = 0; i < nb_rx; i++) {
 			if (likely(i + 4 < nb_rx)) {
@@ -53,7 +56,7 @@ int worker_loop(void *arg)
 
 			pkt_metadata_t *meta = (pkt_metadata_t *)rte_mbuf_to_priv(m);
 			if (likely(meta->is_valid)) {
-				int rule_idx = match_rule(&meta->tuple);
+				int rule_idx = match_rule(rules, num_rules, &meta->tuple);
 				if (rule_idx >= 0) {
 					local_rule_hits[rule_idx]++;
 
@@ -78,9 +81,7 @@ int worker_loop(void *arg)
 		g_worker_stats[w_id].rx_bytes    += w_rx_bytes;
 		g_worker_stats[w_id].dropped_packets += w_drop_pkts;
 
-		uint32_t num_rules =
-			atomic_load_explicit(&g_active_num_rules,
-					     memory_order_relaxed);
+
 		for (uint32_t i = 0; i < num_rules; i++)
 			g_worker_stats[w_id].rule_hits[i] +=
 				local_rule_hits[i];

@@ -18,8 +18,11 @@
 #include "stats.h"
 #include "worker.h"
 
-#define NUM_MBUFS       8192
-#define MBUF_CACHE_SIZE 250
+/* MIN_MBUFS = rxd(1024) + txd(1024) + workers*RING_SIZE(4*4096) + lcores*BURST_SIZE*2(5*64*2)
+ * = 1024 + 1024 + 16384 + 640 = 19072. Use 32767 (2^15-1) for a safe 1.7x margin.
+ * MBUF_CACHE_SIZE: power-of-2 <= RTE_MEMPOOL_CACHE_MAX_SIZE(512) and <= NUM_MBUFS/1.5 */
+#define NUM_MBUFS       32767
+#define MBUF_CACHE_SIZE 256
 
 static const char      *rule_file = "spi_rules.conf";
 static struct rte_ring  *worker_rings[MAX_WORKERS];
@@ -96,7 +99,7 @@ int main(int argc, char **argv)
 			 "rx queue setup failed: err=%d, port=%u\n",
 			 ret, portid);
 
-	ret = rte_eth_tx_queue_setup(portid, 0, 1024,
+	ret = rte_eth_tx_queue_setup(portid, 0, 64,
 				     rte_eth_dev_socket_id(portid), NULL);
 	if (ret < 0)
 		rte_exit(EXIT_FAILURE,

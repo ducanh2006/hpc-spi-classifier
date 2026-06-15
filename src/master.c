@@ -43,9 +43,9 @@ int master_loop(struct rte_ring *worker_rings[], uint32_t num_workers, uint16_t 
 			
 			if (likely(parse_five_tuple(m, &meta->tuple))) {
 				meta->is_valid = 1;
-				uint32_t hash = meta->tuple.src_ip ^ meta->tuple.dst_ip ^ ((uint32_t)meta->tuple.src_port << 16) ^ meta->tuple.dst_port ^ meta->tuple.protocol;
-				hash ^= (hash >> 16);
-				hash ^= (hash >> 8);
+				uint32_t hash = rte_jhash_3words(meta->tuple.src_ip, meta->tuple.dst_ip,
+					((uint32_t)meta->tuple.src_port << 16) | meta->tuple.dst_port,
+					meta->tuple.protocol);
 				target_worker = hash & (num_workers - 1); // Fast modulo for power of 2
 			} else {
 				meta->is_valid = 0;

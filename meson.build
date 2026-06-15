@@ -3,7 +3,8 @@ project('spifast', 'c',
     default_options: [
         'buildtype=release',
         'c_std=gnu11',
-        'warning_level=3'
+        'warning_level=3',
+        'b_lto=true'
     ]
 )
 
@@ -25,6 +26,7 @@ executable('spifast',
     sources,
     include_directories: inc,
     dependencies: dpdk_dep,
+    c_args: ['-march=native', '-mtune=native'],
     install: false
 )
 

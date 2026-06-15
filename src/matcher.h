@@ -35,13 +35,8 @@ int matcher_reload(const char *rule_file);
  *   - field order:   most-selective checks first (protocol → ports → IPs)
  */
 static inline __attribute__((always_inline))
-int match_rule(const five_tuple_t *__restrict__ tuple)
+int match_rule(const spi_rule_t *__restrict__ rules, uint32_t num_rules, const five_tuple_t *__restrict__ tuple)
 {
-	/* Lock-free snapshot of the currently active rule table */
-	const spi_rule_t *__restrict__ rules =
-		atomic_load_explicit(&g_active_rules, memory_order_acquire);
-	uint32_t num_rules =
-		atomic_load_explicit(&g_active_num_rules, memory_order_acquire);
 
 	for (uint32_t i = 0; i < num_rules; i++) {
 		if (rules[i].tuple.protocol != 0 &&

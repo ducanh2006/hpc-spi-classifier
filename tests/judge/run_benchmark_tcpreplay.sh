@@ -60,7 +60,8 @@ for pcap in "$DATA_DIR"/*.pcap; do
     # Run application using timeout and send output to log file
     # Ensure Hugepages are active
     timeout --preserve-status $BENCHMARK_TIME $APP -d "$TMP_DRIVER_DIR" -l 0-4 -n 4 --vdev "net_pcap0,rx_iface=veth0" -- -r "$PROJECT_ROOT/spi_rules.conf" > "$LOG_FILE" 2>&1
-    
+    # timeout --preserve-status $BENCHMARK_TIME $APP -d "$TMP_DRIVER_DIR" -l 0,2,4,6,8 -n 4 --vdev "net_pcap0,rx_iface=veth0" -- -r "$PROJECT_ROOT/spi_rules.conf" > "$LOG_FILE" 2>&1
+
     # Cleanup veth and tcpreplay
     kill -9 $TCPREPLAY_PID 2>/dev/null
     ip link delete veth0 2>/dev/null
