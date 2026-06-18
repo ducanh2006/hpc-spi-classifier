@@ -13,15 +13,36 @@ int master_loop(struct rte_ring *worker_rings[], uint32_t num_workers, uint16_t 
 	printf("Master started on lcore %u\n", rte_lcore_id());
 	
 	uint16_t loop_count = 0;
+#ifdef DEBUG_MODE
+	static uint64_t debug_packet_idx = 0;
+	static uint64_t idle_loops = 0;
+#endif
 	
-	while (1) {
+	while (!force_quit) {
+#ifndef DEBUG_MODE
 		if (unlikely((loop_count++ & 0xFFF) == 0)) {
 			stats_print_periodic();
 		}
+#endif
 		
 		uint16_t nb_rx = rte_eth_rx_burst(port_id, 0, bufs, BURST_SIZE);
 		
-		if (unlikely(nb_rx == 0)) continue;
+		if (unlikely(nb_rx == 0)) {
+#ifdef DEBUG_MODE
+			if (debug_packet_idx > 0) {
+				idle_loops++;
+				if (idle_loops > 5000000) {
+					printf("Debug mode: PCAP stream ended, exiting master.\n");
+					force_quit = true;
+					break;
+				}
+			}
+#endif
+			continue;
+		}
+#ifdef DEBUG_MODE
+		idle_loops = 0;
+#endif
 		
 		uint64_t total_rx_bytes = 0;
 		
@@ -39,6 +60,9 @@ int master_loop(struct rte_ring *worker_rings[], uint32_t num_workers, uint16_t 
 			total_rx_bytes += rte_pktmbuf_pkt_len(m);
 			
 			pkt_metadata_t *meta = (pkt_metadata_t *)rte_mbuf_to_priv(m);
+#ifdef DEBUG_MODE
+			meta->packet_index = debug_packet_idx++;
+#endif
 			uint32_t target_worker = 0;
 			
 			if (likely(parse_five_tuple(m, &meta->tuple))) {

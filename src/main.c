@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <signal.h>
 
 #include <rte_common.h>
 #include <rte_eal.h>
@@ -27,6 +28,16 @@
 static const char      *rule_file = "spi_rules.conf";
 static struct rte_ring  *worker_rings[MAX_WORKERS];
 static struct worker_params w_params[MAX_WORKERS];
+
+volatile bool force_quit = false;
+
+static void signal_handler(int signum)
+{
+	if (signum == SIGINT || signum == SIGTERM) {
+		printf("\n\nSignal %d received, preparing to exit...\n", signum);
+		force_quit = true;
+	}
+}
 
 static int parse_args(int argc, char **argv)
 {
@@ -53,6 +64,9 @@ int main(int argc, char **argv)
 
 	if (parse_args(argc, argv) < 0)
 		rte_exit(EXIT_FAILURE, "Invalid application arguments\n");
+
+	signal(SIGINT, signal_handler);
+	signal(SIGTERM, signal_handler);
 
 	/* Load the initial rule set into table_a and activate it */
 	if (matcher_init(rule_file) < 0)

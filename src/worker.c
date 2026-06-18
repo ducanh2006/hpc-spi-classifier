@@ -16,9 +16,19 @@ int worker_loop(void *arg)
 
 	struct rte_mbuf *bufs[BURST_SIZE];
 
+#ifdef DEBUG_MODE
+	FILE *debug_fp = NULL;
+	if (w_id == 0) {
+		debug_fp = fopen("tests/results/actual.csv", "w");
+		if (debug_fp) {
+			fprintf(debug_fp, "Packet_Index,Rule,Action\n");
+		}
+	}
+#endif
+
 	printf("Worker %u started on lcore %u\n", w_id, rte_lcore_id());
 
-	while (1) {
+	while (!force_quit) {
 		uint16_t nb_rx = rte_ring_dequeue_burst(ring,
 						(void **)bufs,
 						BURST_SIZE, NULL);
@@ -65,13 +75,29 @@ int worker_loop(void *arg)
 					if (rules[rule_idx].action_mask ==
 					    ACTION_DROP)
 						w_drop_pkts++;
+#ifdef DEBUG_MODE
+					if (debug_fp) {
+						fprintf(debug_fp, "%lu,%s,%s\n", meta->packet_index, rules[rule_idx].name, 
+							rules[rule_idx].action_mask == ACTION_FORWARD ? "FORWARD" : "DROP");
+					}
+#endif
 				} else {
 					/* No match — default drop */
 					w_drop_pkts++;
+#ifdef DEBUG_MODE
+					if (debug_fp) {
+						fprintf(debug_fp, "%lu,DEFAULT_DROP,DROP\n", meta->packet_index);
+					}
+#endif
 				}
 			} else {
 				/* Non-IPv4/TCP/UDP — drop */
 				w_drop_pkts++;
+#ifdef DEBUG_MODE
+				if (debug_fp) {
+					fprintf(debug_fp, "%lu,INVALID,DROP\n", meta->packet_index);
+				}
+#endif
 			}
 		}
 
@@ -89,6 +115,12 @@ int worker_loop(void *arg)
 		/* Batch memory free — single call amortises overhead */
 		rte_pktmbuf_free_bulk(bufs, nb_rx);
 	}
+
+#ifdef DEBUG_MODE
+	if (debug_fp) {
+		fclose(debug_fp);
+	}
+#endif
 
 	return 0;
 }

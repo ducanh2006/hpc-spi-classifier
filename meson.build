@@ -35,3 +35,12 @@ executable('spi_cli',
     files('src/spi_cli.c'),
     install: false
 )
+
+# Debug mode spifast data-plane application
+executable('spifast_debug',
+    sources,
+    include_directories: inc,
+    dependencies: dpdk_dep,
+    c_args: ['-march=native', '-mtune=native', '-DDEBUG_MODE'],
+    install: false
+)

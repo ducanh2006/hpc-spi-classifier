@@ -18,6 +18,8 @@
 #define likely(x)   __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
 
+extern volatile bool force_quit;
+
 typedef enum {
 	ACTION_DROP    = 0,
 	ACTION_FORWARD = 1,
@@ -34,6 +36,9 @@ typedef struct {
 typedef struct {
 	five_tuple_t tuple;
 	uint8_t is_valid;
+#ifdef DEBUG_MODE
+	uint64_t packet_index;
+#endif
 } pkt_metadata_t;
 
 
