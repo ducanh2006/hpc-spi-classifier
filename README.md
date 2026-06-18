@@ -165,13 +165,13 @@ Toàn bộ quá trình chạy chương trình, file log chi tiết và kết qu�
 
 Trước khi thực hiện đo kiểm hiệu năng, hệ thống đã phải vượt qua các bài kiểm thử khắt khe về tính đúng đắn khi xử lý gói tin (phân loại đúng luật, không bỏ sót gói). Dưới đây là kết quả kiểm thử chức năng tự động trích xuất từ file `tests/results/testcase_results.csv`:
 
-| Tiêu chí (Metric) | Kết quả (Value) | Đánh giá |
-| :--- | :--- | :--- |
-| **Tổng số gói tin (Total Packets)** | 239 | |
-| **Phân loại khớp (Matched)** | 239 | |
-| **Bỏ sót (Missing)** | 0 | 🟢 **Tuyệt đối** |
-| **Sai lệch (Mismatched)** | 0 | 🟢 **Tuyệt đối** |
-| **Độ chính xác (Accuracy)** | **100.00%** | 🎯 **Hoàn hảo** |
+| Tiêu chí (Metric) | Kết quả (Value) |
+| :--- | :--- |
+| **Tổng số gói tin (Total Packets)** | 239 |
+| **Phân loại khớp (Matched)** | 239 |
+| **Bỏ sót (Missing)** | 0 |
+| **Sai lệch (Mismatched)** | 0 |
+| **Độ chính xác (Accuracy)** | **100.00%** |
 
 ---
 
@@ -236,7 +236,7 @@ Trước khi thực hiện đo kiểm hiệu năng, hệ thống đã phải vư
     ```
 *   **Độc giả không khóa (Lock-Free Reader)**: Worker Core nạp con trỏ bảng luật một lần cho mỗi burst gói tin bằng lệnh đọc thu nhận (`atomic_load_explicit` với `memory_order_acquire`). Worker xử lý trọn vẹn burst hiện tại trên bảng luật cũ trong khi bảng luật mới đã được swap cho burst kế tiếp, đảm bảo tính nhất quán dữ liệu mà không cần dùng Mutex hay Spinlock.
 
-#### 6.1.3. Kỹ thuật nạp trước dữ liệu (Memory Prefetching)
+#### 3. Kỹ thuật nạp trước dữ liệu (Memory Prefetching)
 Để che giấu độ trễ truy xuất RAM (Memory Latency Overhead), Worker Core liên tục nạp trước (prefetch) siêu dữ liệu gói tin (`rte_mbuf`) và vùng chứa header của các gói tin tiếp theo vào bộ nhớ cache L1 của CPU trước khi thực tế thao tác trên nó:
 ```c
 if (likely(i + 4 < nb_rx)) {
@@ -245,12 +245,12 @@ if (likely(i + 4 < nb_rx)) {
 }
 ```
 
-#### 6.1.4. Các kỹ thuật tối ưu hóa HPC khác
+#### 4. Các kỹ thuật tối ưu hóa HPC khác
 *   **Zero-Copy Parser**: Sử dụng macro `rte_pktmbuf_mtod` để ép kiểu trực tiếp con trỏ vùng nhớ gói tin sang các cấu trúc tiêu đề mạng (`struct rte_ipv4_hdr`, `struct rte_tcp_hdr`) mà không cần sao chép bộ nhớ (`memcpy`).
 *   **Tránh False Sharing**: Đánh dấu các cấu trúc thống kê cục bộ bằng `__rte_cache_aligned` (căn lề theo cache-line 64 bytes) để đảm bảo mỗi Worker ghi dữ liệu lên vùng nhớ độc lập, tránh xung đột bộ đệm L2/L3 giữa các nhân CPU khác nhau.
 *   **Gộp nhóm xử lý (Batching)**: Nhận gói (`rte_eth_rx_burst`), truyền gói (`rte_ring_enqueue_burst`), và giải phóng bộ nhớ (`rte_pktmbuf_free_bulk`) theo từng nhóm (Burst) để giảm thiểu chi phí overhead gọi hàm và tranh chấp khóa của Mempool.
 
-### 6.2. Cấu trúc thư mục mã nguồn (`src/`)
+### 6.1. Cấu trúc thư mục mã nguồn (`src/`)
 
 Dưới đây là sơ đồ cây thư mục chi tiết của phân hệ xử lý chính ([src/](file:///c:/Users/ADMIN/Desktop/coding/hpc-spi-classifier/src)) và mô tả vai trò của từng thành phần:
 
@@ -267,7 +267,7 @@ src/
 └── spi_cli.c        # Tiện ích dòng lệnh (CLI) tương tác điều khiển động hệ thống
 ```
 
-### 6.3. Sơ đồ dòng dữ liệu (Data Flow & Pipeline Model)
+### 6.2. Sơ đồ dòng dữ liệu (Data Flow & Pipeline Model)
 
 Hệ thống hoạt động theo mô hình Pipeline song song phi trạng thái (Stateless Lock-free Pipeline). Dòng dữ liệu từ khi nhận gói tin cho đến khi xử lý hoàn tất được mô tả qua sơ đồ Mermaid dưới đây:
 
@@ -296,7 +296,7 @@ graph TD
     GN -->|rte_pktmbuf_free_bulk| HN[Mempool Return]
 ```
 
-### 6.4. Chi tiết chức năng các phân hệ
+### 6.3. Chi tiết chức năng các phân hệ
 
 1. **Khởi tạo hệ thống (`main.c`)**: Khởi tạo môi trường DPDK EAL, tạo `rte_mempool` để chứa gói tin, tạo các hàng đợi vòng khóa `rte_ring` và cấu hình cổng mạng ảo `net_pcap`.
 2. **Nhận và phân phối gói tin (`master.c`)**: Chạy vòng lặp vô hạn trên lcore Master, liên tục nhận burst gói tin từ cổng mạng ảo. Với mỗi gói tin, Master trích xuất địa chỉ IP, Port và Protocol (5-tuple), sau đó dùng thuật toán `rte_jhash` để tính toán phân bổ tải (Dynamic Load Balancing) và đưa gói tin vào hàng đợi `rte_ring` tương ứng của các Worker Cores.
