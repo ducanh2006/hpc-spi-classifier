@@ -12,7 +12,9 @@ int master_loop(struct rte_ring *worker_rings[], uint32_t num_workers, uint16_t 
 	
 	printf("Master started on lcore %u\n", rte_lcore_id());
 	
+#ifndef DEBUG_MODE
 	uint16_t loop_count = 0;
+#endif
 #ifdef DEBUG_MODE
 	static uint64_t debug_packet_idx = 0;
 	static uint64_t idle_loops = 0;

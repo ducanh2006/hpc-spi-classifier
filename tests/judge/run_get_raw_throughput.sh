@@ -21,6 +21,9 @@ echo "      Testing Maximum tcpreplay Injection Speed (${BENCHMARK_TIME}s per fi
 echo "      (Independent of /src - purely measuring veth capacity)                    "
 echo "================================================================================"
 
+CSV_FILE="$RESULTS_DIR/benchmark_raw_throughput_summary.csv"
+echo "PCAP_File,Throughput_Mbps,Flow_Rate_pps,Master_Drop_Packets,Worker_Drop_Packets" > "$CSV_FILE"
+
 for pcap in "$DATA_DIR"/*.pcap; do
     if [ ! -f "$pcap" ]; then
         echo "No .pcap files found in $DATA_DIR"
@@ -76,9 +79,12 @@ for pcap in "$DATA_DIR"/*.pcap; do
     kill -9 $TCPREPLAY_PID 2>/dev/null || true
     ip link delete veth0 2>/dev/null || true
     
+    echo "$pcap_name,$AVG_THROUGHPUT,$AVG_FLOW_RATE,N/A,N/A" >> "$CSV_FILE"
+    
     echo "   [Result] Avg Throughput: $AVG_THROUGHPUT Mbps | Avg Flow Rate: $AVG_FLOW_RATE pps"
 done
 
 echo "================================================================================"
-echo "Benchmark complete."
+echo "Benchmark complete. Results saved in:"
+echo "  - Summary: $CSV_FILE"
 echo "================================================================================"

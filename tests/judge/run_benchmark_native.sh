@@ -26,7 +26,7 @@ echo "===================================================="
 echo "      SPIFast Automated Benchmark (${BENCHMARK_TIME}s per file)      "
 echo "===================================================="
 
-CSV_FILE="$RESULTS_DIR/benchmark_summary.csv"
+CSV_FILE="$RESULTS_DIR/benchmark_native_summary.csv"
 echo "PCAP_File,Throughput_Mbps,Flow_Rate_pps,Master_Drop_Packets,Worker_Drop_Packets" > "$CSV_FILE"
 
 # Copy ONLY required DPDK PMD drivers to a secure directory to bypass EAL 'world-writable' error and avoid duplicate loading

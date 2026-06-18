@@ -62,6 +62,23 @@ def check_correctness(expected_csv_path, actual_csv_path):
         for m in mismatched[:5]:
             print(f"  Packet {m['Packet_Index']} | Expected: {m['Expected']} | Actual: {m['Actual']}")
             
+    output_csv = os.path.join(os.path.dirname(actual_csv_path), "testcase_results.csv")
+    with open(output_csv, 'w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(["Test_Type", "Metric", "Value"])
+        writer.writerow(["Functional", "Total Packets", total_packets])
+        writer.writerow(["Functional", "Matched", matched])
+        writer.writerow(["Functional", "Missing", len(missing)])
+        writer.writerow(["Functional", "Mismatched", len(mismatched)])
+        writer.writerow(["Functional", "Accuracy", f"{accuracy:.2f}%"])
+        if len(mismatched) > 0:
+            writer.writerow([])
+            writer.writerow(["Sample Mismatches"])
+            writer.writerow(["Packet_Index", "Expected", "Actual"])
+            for m in mismatched[:5]:
+                writer.writerow([m['Packet_Index'], m['Expected'], m['Actual']])
+    print(f"Results exported to: {output_csv}")
+            
     if accuracy == 100.0:
         print("\n[RESULT] PASSED! Perfect Match.")
         return True

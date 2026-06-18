@@ -17,7 +17,7 @@ cleanup() {
   ip link delete veth0 2>/dev/null
 }
 trap cleanup EXIT INT TERM
-PCAP_FILE=${1:-"./tests/data/pcap/tls13-rfc8446.pcap"}
+#PCAP_FILE=${1:-"./tests/data/pcap/tls13-rfc8446.pcap"}
 PCAP_FILE=${1:-"./tests/data/pcap/balanced_traffic.pcap"}
 
 # Run tcpreplay in background
