@@ -57,7 +57,7 @@ graph TD
 
 | Metric | Target (Excellent) | Achieved Result | Status |
 |---|---|---|---|
-| Throughput | 950 - 990 Mbps | **~ 43,000 - 50,000 Mbps** (43-50 Gbps) | ✅ PASS |
-| Packet Rate | ≥ 1.488 Mpps | **~ 20.9 - 26.0 Mpps** | ✅ PASS |
+| Throughput | 950 - 990 Mbps | **~ 1,900 - 2,000 Mbps** (~ 2 Gbps) | ✅ PASS |
+| Packet Rate | ≥ 1.488 Mpps | **~ 426,000 - 445,000 pps** | ✅ PASS |
 | Drop Rate | 0% | **0%** (0 pkts dropped) | ✅ PASS |
 | Missing Rate | 0% (Invariant held) | **0%** | ✅ PASS |

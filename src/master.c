@@ -12,12 +12,39 @@ int master_loop(struct rte_ring *worker_rings[], uint32_t num_workers, uint16_t 
 	
 	printf("Master started on lcore %u\n", rte_lcore_id());
 	
-	while (1) {
-		stats_print_periodic();
+#ifndef DEBUG_MODE
+	uint16_t loop_count = 0;
+#endif
+#ifdef DEBUG_MODE
+	static uint64_t debug_packet_idx = 0;
+	static uint64_t idle_loops = 0;
+#endif
+	
+	while (!force_quit) {
+#ifndef DEBUG_MODE
+		if (unlikely((loop_count++ & 0xFFF) == 0)) {
+			stats_print_periodic();
+		}
+#endif
 		
 		uint16_t nb_rx = rte_eth_rx_burst(port_id, 0, bufs, BURST_SIZE);
 		
-		if (unlikely(nb_rx == 0)) continue;
+		if (unlikely(nb_rx == 0)) {
+#ifdef DEBUG_MODE
+			if (debug_packet_idx > 0) {
+				idle_loops++;
+				if (idle_loops > 5000000) {
+					printf("Debug mode: PCAP stream ended, exiting master.\n");
+					force_quit = true;
+					break;
+				}
+			}
+#endif
+			continue;
+		}
+#ifdef DEBUG_MODE
+		idle_loops = 0;
+#endif
 		
 		uint64_t total_rx_bytes = 0;
 		
@@ -26,23 +53,30 @@ int master_loop(struct rte_ring *worker_rings[], uint32_t num_workers, uint16_t 
 		uint16_t worker_buf_count[MAX_WORKERS] = {0};
 		
 		for (uint16_t i = 0; i < nb_rx; i++) {
+			if (likely(i + 4 < nb_rx)) {
+				rte_prefetch0(bufs[i + 4]);
+				rte_prefetch0(rte_pktmbuf_mtod(bufs[i + 4], void *));
+			}
+
 			struct rte_mbuf *m = bufs[i];
 			total_rx_bytes += rte_pktmbuf_pkt_len(m);
 			
-			five_tuple_t tuple;
+			pkt_metadata_t *meta = (pkt_metadata_t *)rte_mbuf_to_priv(m);
+#ifdef DEBUG_MODE
+			meta->packet_index = debug_packet_idx++;
+#endif
 			uint32_t target_worker = 0;
 			
-			if (likely(parse_five_tuple(m, &tuple))) {
-				// Software RSS Hashing
-				// We hash the 5-tuple to preserve flow affinity
-				uint32_t word1 = tuple.src_ip;
-				uint32_t word2 = tuple.dst_ip;
-				uint32_t word3 = ((uint32_t)tuple.src_port) | (((uint32_t)tuple.dst_port) << 16) | (((uint32_t)tuple.protocol) << 8);
-				uint32_t hash = rte_jhash_3words(word1, word2, word3, 0xdeadbeef);
-				target_worker = hash % num_workers;
+			if (likely(parse_five_tuple(m, &meta->tuple))) {
+				meta->is_valid = 1;
+				uint32_t hash = rte_jhash_3words(meta->tuple.src_ip, meta->tuple.dst_ip,
+					((uint32_t)meta->tuple.src_port << 16) | meta->tuple.dst_port,
+					meta->tuple.protocol);
+				target_worker = hash & (num_workers - 1); // Fast modulo for power of 2
 			} else {
+				meta->is_valid = 0;
 				// If not parsable, just distribute round robin
-				target_worker = i % num_workers;
+				target_worker = i & (num_workers - 1);
 			}
 			
 			worker_bufs[target_worker][worker_buf_count[target_worker]++] = m;

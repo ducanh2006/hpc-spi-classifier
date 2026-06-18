@@ -26,7 +26,7 @@ echo "===================================================="
 echo "      SPIFast Automated Benchmark (${BENCHMARK_TIME}s per file)      "
 echo "===================================================="
 
-CSV_FILE="$RESULTS_DIR/benchmark_summary.csv"
+CSV_FILE="$RESULTS_DIR/benchmark_native_summary.csv"
 echo "PCAP_File,Throughput_Mbps,Flow_Rate_pps,Master_Drop_Packets,Worker_Drop_Packets" > "$CSV_FILE"
 
 # Copy ONLY required DPDK PMD drivers to a secure directory to bypass EAL 'world-writable' error and avoid duplicate loading
@@ -58,8 +58,8 @@ for pcap in "$DATA_DIR"/*.pcap; do
     # Master Rx: X pkts | Master Drop: Y pkts
     # Worker Rx: A pkts | Worker Drop: B pkts
     
-    THROUGHPUT=$(grep "Throughput:" "$LOG_FILE" | tail -n 1 | awk '{print $2}')
-    FLOW_RATE=$(grep "Flow Rate:" "$LOG_FILE" | tail -n 1 | awk '{print $7}')
+    THROUGHPUT=$(grep "Throughput:" "$LOG_FILE" | awk '{sum+=$2; count++} END {if (count > 0) printf "%.2f", sum/count; else print "0.00"}')
+    FLOW_RATE=$(grep "Flow Rate:" "$LOG_FILE" | awk '{sum+=$7; count++} END {if (count > 0) printf "%.0f", sum/count; else print "0"}')
     
     MASTER_DROP=$(grep "Master Drop:" "$LOG_FILE" | tail -n 1 | awk '{print $8}')
     WORKER_DROP=$(grep "Worker Drop:" "$LOG_FILE" | tail -n 1 | awk '{print $8}')

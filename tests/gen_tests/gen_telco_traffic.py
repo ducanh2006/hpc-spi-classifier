@@ -12,12 +12,12 @@ PAYLOAD_SIZE = 512
 
 # Rules definition
 RULES = [
-    {"name": "GTPU_TRAFFIC",  "proto": "UDP", "port": 2152, "action": "FORWARD_WORKER_3", "mock": b'\x30\xff\x00\x1c\x00\x00\x00\x00'},
-    {"name": "HTTPS_TRAFFIC", "proto": "TCP", "port": 443,  "action": "FORWARD_WORKER_1", "mock": b'\x16\x03\x01\x00\x00'},
-    {"name": "HTTP_TRAFFIC",  "proto": "TCP", "port": 80,   "action": "FORWARD_WORKER_0", "mock": b'GET / HTTP/1.1\r\nHost: example.com\r\n\r\n'},
-    {"name": "DNS_TRAFFIC",   "proto": "UDP", "port": 53,   "action": "FORWARD_WORKER_2", "mock": b'\x00\x01\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x03www\x06google\x03com\x00\x00\x01\x00\x01'},
-    {"name": "SSH_BLOCK",     "proto": "TCP", "port": 22,   "action": "DROP",             "mock": b'SSH-2.0-OpenSSH_8.9p1\r\n'},
-    {"name": "DEFAULT",       "proto": "TCP", "port": 9999, "action": "DROP",             "mock": b'UNKNOWN_PROTOCOL_DATA'}
+    {"name": "GTPU_TRAFFIC",  "proto": "UDP", "port": 2152, "action": "FORWARD", "mock": b'\x30\xff\x00\x1c\x00\x00\x00\x00'},
+    {"name": "HTTPS_TRAFFIC", "proto": "TCP", "port": 443,  "action": "FORWARD", "mock": b'\x16\x03\x01\x00\x00'},
+    {"name": "HTTP_TRAFFIC",  "proto": "TCP", "port": 80,   "action": "FORWARD", "mock": b'GET / HTTP/1.1\r\nHost: example.com\r\n\r\n'},
+    {"name": "DNS_TRAFFIC",   "proto": "UDP", "port": 53,   "action": "FORWARD", "mock": b'\x00\x01\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x03www\x06google\x03com\x00\x00\x01\x00\x01'},
+    {"name": "SSH_BLOCK",     "proto": "TCP", "port": 22,   "action": "DROP",    "mock": b'SSH-2.0-OpenSSH_8.9p1\r\n'},
+    {"name": "DEFAULT",       "proto": "TCP", "port": 9999, "action": "DROP",    "mock": b'UNKNOWN_PROTOCOL_DATA'}
 ]
 
 WEIGHTS = {
