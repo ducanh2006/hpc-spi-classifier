@@ -1,5 +1,6 @@
 #include "worker.h"
 
+#include <rte_acl.h>
 #include <rte_lcore.h>
 #include <rte_mbuf.h>
 
@@ -42,9 +43,7 @@ int worker_loop(void *arg)
 
 		/*
 		 * Take a single lock-free snapshot of the active rule table
-		 * for this burst.  All packets in the burst see a consistent
-		 * rule set; the next burst may transparently see a new one
-		 * after a hot-reload.
+		 * and active ACL context for this burst.
 		 */
 		const spi_rule_t *rules =
 			atomic_load_explicit(&g_active_rules,
@@ -52,6 +51,14 @@ int worker_loop(void *arg)
 		uint32_t num_rules =
 			atomic_load_explicit(&g_active_num_rules,
 					     memory_order_acquire);
+		struct rte_acl_ctx *acl_ctx =
+			atomic_load_explicit(&g_active_acl_ctx,
+					     memory_order_acquire);
+
+		const uint8_t *data_ptrs[BURST_SIZE];
+		uint32_t results[BURST_SIZE];
+		uint16_t valid_indices[BURST_SIZE];
+		uint32_t num_valid = 0;
 
 		for (uint16_t i = 0; i < nb_rx; i++) {
 			if (likely(i + 4 < nb_rx)) {
@@ -66,32 +73,10 @@ int worker_loop(void *arg)
 
 			pkt_metadata_t *meta = (pkt_metadata_t *)rte_mbuf_to_priv(m);
 			if (likely(meta->is_valid)) {
-				int rule_idx = match_rule(rules, num_rules, &meta->tuple);
-				if (rule_idx >= 0) {
-					local_rule_hits[rule_idx]++;
-
-					/* Use the burst-local pointer — same
-					 * snapshot, avoids a second atomic load */
-					if (rules[rule_idx].action_mask ==
-					    ACTION_DROP)
-						w_drop_pkts++;
-#ifdef DEBUG_MODE
-					if (debug_fp) {
-						fprintf(debug_fp, "%lu,%s,%s\n", meta->packet_index, rules[rule_idx].name, 
-							rules[rule_idx].action_mask == ACTION_FORWARD ? "FORWARD" : "DROP");
-					}
-#endif
-				} else {
-					/* No match — default drop */
-					w_drop_pkts++;
-#ifdef DEBUG_MODE
-					if (debug_fp) {
-						fprintf(debug_fp, "%lu,DEFAULT_DROP,DROP\n", meta->packet_index);
-					}
-#endif
-				}
+				data_ptrs[num_valid] = (const uint8_t *)&meta->tuple;
+				valid_indices[num_valid] = i;
+				num_valid++;
 			} else {
-				/* Non-IPv4/TCP/UDP — drop */
 				w_drop_pkts++;
 #ifdef DEBUG_MODE
 				if (debug_fp) {
@@ -101,12 +86,65 @@ int worker_loop(void *arg)
 			}
 		}
 
-		/* Flush local counters to per-worker stats (non-atomic add
-		 * is safe: only this lcore writes to its own slot) */
+		if (num_valid > 0 && likely(acl_ctx != NULL)) {
+			rte_acl_classify(acl_ctx, data_ptrs, results, num_valid, 1);
+
+			for (uint32_t i = 0; i < num_valid; i++) {
+				uint16_t idx = valid_indices[i];
+				struct rte_mbuf *m = bufs[idx];
+				pkt_metadata_t *meta = (pkt_metadata_t *)rte_mbuf_to_priv(m);
+				uint32_t res = results[i];
+
+				if (res > 0) {
+					uint32_t rule_idx = res - 1;
+					if (likely(rule_idx < num_rules)) {
+						local_rule_hits[rule_idx]++;
+						if (rules[rule_idx].action_mask == ACTION_DROP)
+							w_drop_pkts++;
+#ifdef DEBUG_MODE
+						if (debug_fp) {
+							fprintf(debug_fp, "%lu,%s,%s\n",
+								meta->packet_index,
+								rules[rule_idx].name,
+								rules[rule_idx].action_mask == ACTION_FORWARD ? "FORWARD" : "DROP");
+						}
+#endif
+					} else {
+						w_drop_pkts++;
+#ifdef DEBUG_MODE
+						if (debug_fp) {
+							fprintf(debug_fp, "%lu,DEFAULT_DROP,DROP\n", meta->packet_index);
+						}
+#endif
+					}
+				} else {
+					w_drop_pkts++;
+#ifdef DEBUG_MODE
+					if (debug_fp) {
+						fprintf(debug_fp, "%lu,DEFAULT_DROP,DROP\n", meta->packet_index);
+					}
+#endif
+				}
+			}
+		} else if (num_valid > 0) {
+			/* No ACL context available yet — drop all valid packets as fallback */
+			for (uint32_t i = 0; i < num_valid; i++) {
+				w_drop_pkts++;
+#ifdef DEBUG_MODE
+				uint16_t idx = valid_indices[i];
+				struct rte_mbuf *m = bufs[idx];
+				pkt_metadata_t *meta = (pkt_metadata_t *)rte_mbuf_to_priv(m);
+				if (debug_fp) {
+					fprintf(debug_fp, "%lu,DEFAULT_DROP,DROP\n", meta->packet_index);
+				}
+#endif
+			}
+		}
+
+		/* Flush local counters to per-worker stats */
 		g_worker_stats[w_id].rx_packets  += w_rx_pkts;
 		g_worker_stats[w_id].rx_bytes    += w_rx_bytes;
 		g_worker_stats[w_id].dropped_packets += w_drop_pkts;
-
 
 		for (uint32_t i = 0; i < num_rules; i++)
 			g_worker_stats[w_id].rule_hits[i] +=

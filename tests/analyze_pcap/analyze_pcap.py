@@ -7,28 +7,80 @@ import sys
 import math
 import os
 import time
+import socket
+import struct
+import glob
 from scapy.all import PcapReader, IP, IPv6, TCP, UDP
 
 
 def load_rules(rule_file):
+    groups = {}
     rules = []
+    current_section = None
     with open(rule_file, 'r') as f:
         for line in f:
             line = line.strip()
             if not line or line.startswith('#'):
                 continue
-            parts = line.split(',')
-            if len(parts) == 7:
-                rules.append({
-                    'name': parts[0],
-                    'proto': parts[1],
-                    'src_ip': parts[2],
-                    'dst_ip': parts[3],
-                    'src_port': parts[4],
-                    'dst_port': parts[5],
-                    'action': parts[6]
-                })
+            if line == '[GROUPS_SECTION]':
+                current_section = 'groups'
+                continue
+            elif line == '[FILTERS_SECTION]':
+                current_section = 'filters'
+                continue
+            
+            parts = [p.strip() for p in line.split(',')]
+            if current_section == 'groups':
+                if len(parts) >= 3:
+                    groups[parts[0]] = (int(parts[1]), parts[2].upper())
+            elif current_section == 'filters':
+                if len(parts) >= 7:
+                    filter_name = parts[0]
+                    group_name = parts[1]
+                    proto = parts[2]
+                    src_ip = parts[3]
+                    dst_ip = parts[4]
+                    src_port = parts[5]
+                    dst_port = parts[6]
+                    
+                    prec, action = groups.get(group_name, (1000, "FORWARD"))
+                    
+                    rules.append({
+                        'name': filter_name,
+                        'proto': proto.upper(),
+                        'src_ip': src_ip,
+                        'dst_ip': dst_ip,
+                        'src_port': src_port,
+                        'dst_port': dst_port,
+                        'priority': 1000 - prec,
+                        'action': action
+                    })
+    # Sort rules by priority descending (highest priority matches first)
+    rules.sort(key=lambda r: r['priority'], reverse=True)
     return rules
+
+
+def ip_in_cidr(ip_str, cidr_str):
+    if cidr_str == '*' or cidr_str == 'ANY' or not cidr_str:
+        return True
+    
+    if '/' in cidr_str:
+        ip_part, mask_part = cidr_str.split('/')
+        mask = int(mask_part)
+    else:
+        ip_part = cidr_str
+        mask = 32
+    
+    try:
+        ip_int = struct.unpack("!I", socket.inet_aton(ip_str))[0]
+        cidr_int = struct.unpack("!I", socket.inet_aton(ip_part))[0]
+        if mask == 0:
+            return True
+        shift = 32 - mask
+        return (ip_int >> shift) == (cidr_int >> shift)
+    except OSError:
+        return False
+
 
 def match_packet(pkt, rules):
     proto_map = {6: 'TCP', 17: 'UDP', 1: 'ICMP'}
@@ -59,9 +111,9 @@ def match_packet(pkt, rules):
     for rule in rules:
         if rule['proto'] != '*' and rule['proto'] != pkt_proto:
             continue
-        if rule['src_ip'] != '*' and rule['src_ip'] != src_ip:
+        if not ip_in_cidr(src_ip, rule['src_ip']):
             continue
-        if rule['dst_ip'] != '*' and rule['dst_ip'] != dst_ip:
+        if not ip_in_cidr(dst_ip, rule['dst_ip']):
             continue
         if rule['src_port'] != '*' and rule['src_port'] != src_port:
             continue
@@ -70,6 +122,7 @@ def match_packet(pkt, rules):
         return rule['name']
 
     return "UNCLASSIFIED"
+
 
 def analyze_pcap(pcap_path, rule_path, output_path):
     rules = load_rules(rule_path)
@@ -86,7 +139,6 @@ def analyze_pcap(pcap_path, rule_path, output_path):
     start_time = time.time()
     
     try:
-        # PcapReader reads packet-by-packet, saving memory
         with PcapReader(pcap_path) as pcap:
             for pkt in pcap:
                 total_packets += 1
@@ -125,7 +177,6 @@ def analyze_pcap(pcap_path, rule_path, output_path):
         f.write("-" * 60 + "\n")
         f.write("Rule Classification Distribution:\n")
         
-        # Sort rules by count descending
         sorted_rules = sorted(rule_counts.items(), key=lambda x: x[1], reverse=True)
         
         for rule_name, count in sorted_rules:
@@ -137,7 +188,6 @@ def analyze_pcap(pcap_path, rule_path, output_path):
     print(f"\nAnalysis complete in {elapsed:.2f} seconds.")
     print(f"Results successfully saved to: {output_path}")
 
-import glob
 
 def main():
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -163,6 +213,7 @@ def main():
         
         print(f"\n[{pcap_filename}] -> [{output_filename}]")
         analyze_pcap(pcap_path, rule_path, output_path)
+
 
 if __name__ == "__main__":
     main()
