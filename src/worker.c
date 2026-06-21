@@ -57,7 +57,9 @@ int worker_loop(void *arg)
 
 		const uint8_t *data_ptrs[BURST_SIZE];
 		uint32_t results[BURST_SIZE];
+#ifdef DEBUG_MODE
 		uint16_t valid_indices[BURST_SIZE];
+#endif
 		uint32_t num_valid = 0;
 
 		for (uint16_t i = 0; i < nb_rx; i++) {
@@ -74,7 +76,9 @@ int worker_loop(void *arg)
 			pkt_metadata_t *meta = (pkt_metadata_t *)rte_mbuf_to_priv(m);
 			if (likely(meta->is_valid)) {
 				data_ptrs[num_valid] = (const uint8_t *)&meta->tuple;
+#ifdef DEBUG_MODE
 				valid_indices[num_valid] = i;
+#endif
 				num_valid++;
 			} else {
 				w_drop_pkts++;
@@ -90,9 +94,11 @@ int worker_loop(void *arg)
 			rte_acl_classify(acl_ctx, data_ptrs, results, num_valid, 1);
 
 			for (uint32_t i = 0; i < num_valid; i++) {
+#ifdef DEBUG_MODE
 				uint16_t idx = valid_indices[i];
 				struct rte_mbuf *m = bufs[idx];
 				pkt_metadata_t *meta = (pkt_metadata_t *)rte_mbuf_to_priv(m);
+#endif
 				uint32_t res = results[i];
 
 				if (res > 0) {
@@ -113,7 +119,7 @@ int worker_loop(void *arg)
 						w_drop_pkts++;
 #ifdef DEBUG_MODE
 						if (debug_fp) {
-							fprintf(debug_fp, "%lu,DEFAULT_DROP,DROP\n", meta->packet_index);
+							fprintf(debug_fp, "%lu,DEFAULT,DROP\n", meta->packet_index);
 						}
 #endif
 					}
@@ -121,7 +127,7 @@ int worker_loop(void *arg)
 					w_drop_pkts++;
 #ifdef DEBUG_MODE
 					if (debug_fp) {
-						fprintf(debug_fp, "%lu,DEFAULT_DROP,DROP\n", meta->packet_index);
+						fprintf(debug_fp, "%lu,DEFAULT,DROP\n", meta->packet_index);
 					}
 #endif
 				}
@@ -135,7 +141,7 @@ int worker_loop(void *arg)
 				struct rte_mbuf *m = bufs[idx];
 				pkt_metadata_t *meta = (pkt_metadata_t *)rte_mbuf_to_priv(m);
 				if (debug_fp) {
-					fprintf(debug_fp, "%lu,DEFAULT_DROP,DROP\n", meta->packet_index);
+					fprintf(debug_fp, "%lu,DEFAULT,DROP\n", meta->packet_index);
 				}
 #endif
 			}
