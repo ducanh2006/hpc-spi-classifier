@@ -18,6 +18,12 @@ This directory contains the automation scripts to run the SPIFast DPDK applicati
    ```bash
    ninja -C build
    ```
+   *Note: Every time you modify the `meson.build` file, you must clean, re-configure, and re-compile the project:*
+   ```bash
+   rm -rf build
+   meson setup build
+   ninja -C build
+   ```
 
 2. **Check Your Test Data**
    Ensure your `.pcap` files are inside the `tests/data/pcap/` folder.
