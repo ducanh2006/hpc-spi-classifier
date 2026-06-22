@@ -56,8 +56,12 @@ typedef struct {
  * the control thread stores with memory_order_release after fully
  * populating the shadow table, guaranteeing a consistent view.
  */
+struct rte_acl_ctx;
+
 extern spi_rule_t g_rule_table_a[MAX_RULES];
 extern spi_rule_t g_rule_table_b[MAX_RULES];
 
 extern _Atomic(spi_rule_t *) g_active_rules;
 extern _Atomic uint32_t      g_active_num_rules;
+extern _Atomic(struct rte_acl_ctx *) g_active_acl_ctx;
+

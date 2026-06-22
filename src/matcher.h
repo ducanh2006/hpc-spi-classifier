@@ -2,6 +2,8 @@
 
 #include <stdint.h>
 
+#include <rte_acl.h>
+
 #include "common.h"
 
 /**
@@ -25,38 +27,21 @@ int matcher_init(const char *rule_file);
 int matcher_reload(const char *rule_file);
 
 /*
- * match_rule - Inline first-match lookup against the active rule table.
+ * match_rule - Inline lookup against the active ACL context.
  *
- * Reads the active rule set via atomic_load (memory_order_acquire) so
- * it always sees a fully-committed table after a hot swap.
- * All existing optimizations are preserved:
- *   - always_inline: no call overhead
- *   - __restrict__:  aliasing hint for the compiler
- *   - field order:   most-selective checks first (protocol → ports → IPs)
+ * Reads the active ACL context via atomic_load (memory_order_acquire).
+ * Always inline to avoid function call overhead.
  */
 static inline __attribute__((always_inline))
-int match_rule(const spi_rule_t *__restrict__ rules, uint32_t num_rules, const five_tuple_t *__restrict__ tuple)
+int match_rule(const struct rte_acl_ctx *acl_ctx, const five_tuple_t *__restrict__ tuple)
 {
+	const uint8_t *data = (const uint8_t *)tuple;
+	uint32_t results = 0;
 
-	for (uint32_t i = 0; i < num_rules; i++) {
-		if (rules[i].tuple.protocol != 0 &&
-		    rules[i].tuple.protocol != tuple->protocol)
-			continue;
-		if (rules[i].tuple.src_port != 0 &&
-		    rules[i].tuple.src_port != tuple->src_port)
-			continue;
-		if (rules[i].tuple.dst_port != 0 &&
-		    rules[i].tuple.dst_port != tuple->dst_port)
-			continue;
-		if (rules[i].tuple.src_ip != 0 &&
-		    rules[i].tuple.src_ip != tuple->src_ip)
-			continue;
-		if (rules[i].tuple.dst_ip != 0 &&
-		    rules[i].tuple.dst_ip != tuple->dst_ip)
-			continue;
+	if (unlikely(acl_ctx == NULL))
+		return -1;
 
-		return (int)i;
-	}
-
-	return -1;
+	rte_acl_classify(acl_ctx, &data, &results, 1, 1);
+	return (results > 0) ? (int)(results - 1) : -1;
 }
+

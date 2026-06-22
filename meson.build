@@ -8,7 +8,23 @@ project('spifast', 'c',
     ]
 )
 
-dpdk_dep = dependency('libdpdk', required: true)
+
+# Try system-wide DPDK first
+dpdk_dep = dependency('libdpdk', required: false)
+
+if not dpdk_dep.found()
+    # Try local DPDK in third_party/ using run_command to invoke pkg-config with local path
+    local_pc_dir = join_paths(meson.current_source_dir(), 'third_party/dpdk-24.11/build/meson-uninstalled')
+    pkgconf = find_program('pkg-config', required: true)
+    
+    cflags_res = run_command('env', 'PKG_CONFIG_PATH=' + local_pc_dir, 'pkg-config', '--cflags', 'libdpdk', check: true)
+    libs_res = run_command('env', 'PKG_CONFIG_PATH=' + local_pc_dir, 'pkg-config', '--libs', 'libdpdk', check: true)
+    
+    dpdk_dep = declare_dependency(
+        compile_args: cflags_res.stdout().strip().split(),
+        link_args: libs_res.stdout().strip().split()
+    )
+endif
 
 inc = include_directories('src')
 
@@ -26,7 +42,7 @@ executable('spifast',
     sources,
     include_directories: inc,
     dependencies: dpdk_dep,
-    c_args: ['-march=native', '-mtune=native'],
+    c_args: ['-march=native', '-mtune=native', '-Ofast', '-funroll-loops', '-fomit-frame-pointer', '-falign-functions=64'],
     install: false
 )
 
@@ -41,6 +57,6 @@ executable('spifast_debug',
     sources,
     include_directories: inc,
     dependencies: dpdk_dep,
-    c_args: ['-march=native', '-mtune=native', '-DDEBUG_MODE'],
+    c_args: ['-march=native', '-mtune=native', '-DDEBUG_MODE', '-Ofast', '-funroll-loops', '-fomit-frame-pointer', '-falign-functions=64'],
     install: false
 )
