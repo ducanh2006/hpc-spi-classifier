@@ -236,15 +236,15 @@ Trước khi thực hiện đo kiểm hiệu năng, hệ thống đã phải vư
 | `balanced_traffic.pcap` | *0.00 Mbps* | *⚠️ Không chạy được (Tràn RAM)* |
 | `telco_traffic.pcap` | *0.00 Mbps* | *⚠️ Không chạy được (Tràn RAM)* |
 
-#### 5.2.3. Chế độ TCPReplay Mode (Bơm gói tin qua Veth Interface)
-**Đặc điểm:** Chế độ này mô phỏng môi trường mạng sát với thực tế hơn bằng cách sử dụng công cụ `tcpreplay` để bơm luồng gói tin thực tế vào một thiết bị mạng ảo (veth interface) của Linux Kernel. Sau đó, ứng dụng DPDK sẽ kéo (poll) các gói tin này từ veth ra để xử lý. Khác với Native Mode, chế độ này phụ thuộc và bị giới hạn trực tiếp bởi tốc độ định tuyến tối đa của ngăn xếp mạng nhân Linux (Linux Kernel Network Stack) – vốn luôn là nút thắt cổ chai (bottleneck) của mọi hệ thống.
+#### 5.2.3. Chế độ TCPReplay Mode
 
-| File PCAP | Thông lượng (Throughput) | Tốc độ gói tin (Flow Rate) |
-| :--- | :--- | :--- |
-| `balanced_traffic.pcap` | **2,003.79 Mbps** | 445,685 pps |
-| `telco_traffic.pcap` | **1,908.53 Mbps** | 426,010 pps |
-| `tls13-rfc8446.pcap` | 734.91 Mbps | 304,187 pps |
-| `http.pcap` | 62.89 Mbps | 37,976 pps |
+| File PCAP | Thông lượng (Throughput) | Tốc độ gói tin (Flow Rate) | % so với Lý thuyết thuần túy (Throughput / pps) |
+| :--- | :--- | :--- | :--- |
+| `balanced_traffic.pcap` | **2,187.30 Mbps** | 486,499 pps | **74.32%** / **77.51%** |
+| `telco_traffic.pcap` | **2,138.93 Mbps** | 477,438 pps | **69.84%** / **72.85%** |
+| `tls13-rfc8446.pcap` | **851.98 Mbps** | 352,640 pps | **72.80%** / **78.59%** |
+| `http.pcap` | **74.92 Mbps** | 45,243 pps | **67.75%** / **75.61%** |
+| `func_test.pcap` | **479.50 Mbps** | 884,046 pps | **51.80%** / **67.08%** |
 
 ---
 
@@ -350,68 +350,6 @@ graph TD
 3. **So khớp luật (`matcher.c`, `parser.h`)**: Tích hợp thư viện **DPDK ACL** (`librte_acl`) để xây dựng cây trie cấu trúc luật. Hỗ trợ định dạng cấu hình hai phân đoạn (`[GROUPS_SECTION]`, `[FILTERS_SECTION]`) cho phép định nghĩa các dải IP CIDR và cổng linh hoạt.
 4. **Xử lý song song (`worker.c`)**: Mỗi lcore Worker được gắn với một hàng đợi `rte_ring` riêng. Worker thực hiện poll burst gói tin, sử dụng hàm `rte_acl_classify` để tra cứu bộ luật hàng loạt trên nhiều gói tin cùng lúc (burst classification). Cuối cùng, ghi nhận thông số thống kê cục bộ và giải phóng gói tin hàng loạt bằng `rte_pktmbuf_free_bulk`.
 5. **Thống kê hiệu năng (`stats.c`)**: Tổng hợp dữ liệu từ các Worker Cores và in ra màn hình thông lượng (Mbps), tốc độ gói (pps) và tỷ lệ trượt/khớp định kỳ mỗi giây, sử dụng kỹ thuật tránh False Sharing (`__rte_cache_aligned`).
-
-### 6.5. Chi tiết mã nguồn từng file và Cơ chế Debug (`DEBUG_MODE`)
-
-Dưới đây là mô tả chi tiết nhiệm vụ của từng file trong thư mục nguồn và cách thức hoạt động của chế độ **Debug Mode** phục vụ kiểm thử tính đúng đắn (Check Correctness).
-
-#### 6.5.1. Vai trò chi tiết của từng file nguồn
-*   **[common.h](file:///c:/Users/ADMIN/Desktop/coding/hpc-spi-classifier/src/common.h)**:
-    *   Định nghĩa các hằng số cấu hình hệ thống như số lượng luật tối đa (`MAX_RULES = 128`), số lượng worker tối đa (`MAX_WORKERS = 4`), kích thước của ring buffer (`RING_SIZE = 4096`), và burst size (`BURST_SIZE = 64`).
-    *   Định nghĩa kiểu dữ liệu 5-tuple ([five_tuple_t](file:///c:/Users/ADMIN/Desktop/coding/hpc-spi-classifier/src/common.h#L28-L34)) và cấu trúc siêu dữ liệu gói tin ([pkt_metadata_t](file:///c:/Users/ADMIN/Desktop/coding/hpc-spi-classifier/src/common.h#L36-L42)) được lưu tại vùng nhớ riêng (private area) của mbuf.
-    *   Khai báo cấu trúc luật ([spi_rule_t](file:///c:/Users/ADMIN/Desktop/coding/hpc-spi-classifier/src/common.h#L45-L50)) được tối ưu hóa căn lề cache-line (`__rte_cache_aligned`) để ngăn ngừa hiện tượng False Sharing.
-    *   Khai báo các biến con trỏ bảng luật và ACL context sử dụng kiểu dữ liệu nguyên tử C11 (`_Atomic`) phục vụ cho cơ chế double buffering.
-*   **[main.c](file:///c:/Users/ADMIN/Desktop/coding/hpc-spi-classifier/src/main.c)**:
-    *   Khởi tạo môi trường DPDK EAL (`rte_eal_init`) và phân tích đối số dòng lệnh (file cấu hình luật thông qua tham số `-r`).
-    *   Khởi tạo bộ so khớp luật và khởi động tiến trình con của control plane (`control_thread_start`).
-    *   Tạo pool quản lý bộ đệm gói tin `rte_mempool` cấu hình thêm vùng nhớ riêng (private area) có kích thước tương đương `pkt_metadata_t`.
-    *   Cấu hình cổng mạng ảo PCAP PMD thông qua các hàm API chuẩn của DPDK (`rte_eth_dev_configure`, `rte_eth_rx_queue_setup`, `rte_eth_dev_start`).
-    *   Tạo các luồng ring buffer đơn nhà sản xuất - đơn người tiêu dùng (`RING_F_SP_ENQ | RING_F_SC_DEQ`) và kích hoạt các luồng Worker (`rte_eal_remote_launch`).
-    *   Khởi chạy vòng lặp điều phối gói tin của Master Core (`master_loop`).
-*   **[master.c](file:///c:/Users/ADMIN/Desktop/coding/hpc-spi-classifier/src/master.c) / [master.h](file:///c:/Users/ADMIN/Desktop/coding/hpc-spi-classifier/src/master.h)**:
-    *   Chạy vòng lặp nhận gói tin liên tục từ cổng mạng ảo bằng hàm `rte_eth_rx_burst()`.
-    *   Áp dụng kỹ thuật prefetch bộ nhớ (`rte_prefetch0`) để tải trước tiêu đề gói tin vào cache của CPU.
-    *   Gọi hàm phân tích tiêu đề mạng nhanh (Zero-copy Parser). Nếu gói tin hợp lệ, Master Core tính toán giá trị băm (Hash RSS) bằng hàm `rte_jhash_3words` rồi chuyển đổi nhanh thành chỉ số Worker bằng toán tử bit AND (`hash & (num_workers - 1)`).
-    *   Tích lũy các gói tin vào mảng đệm và phân phối hàng loạt (batching) tới các worker tương ứng thông qua `rte_ring_enqueue_burst()`. Bất kỳ gói tin nào bị tràn hàng đợi sẽ lập tức bị giải phóng thông qua `rte_pktmbuf_free_bulk()`.
-*   **[worker.c](file:///c:/Users/ADMIN/Desktop/coding/hpc-spi-classifier/src/worker.c) / [worker.h](file:///c:/Users/ADMIN/Desktop/coding/hpc-spi-classifier/src/worker.h)**:
-    *   Chạy vòng lặp trên mỗi lcore Worker để lấy các gói tin từ hàng đợi riêng thông qua `rte_ring_dequeue_burst()`.
-    *   Sử dụng cơ chế không khóa (`atomic_load_explicit` với bộ nhớ `memory_order_acquire`) để tham chiếu tức thời tới ACL context và bảng luật đang kích hoạt.
-    *   Trích xuất mảng con trỏ 5-tuple từ vùng nhớ riêng của mbuf và tiến hành so khớp đồng thời hàng loạt (Burst Classification) thông qua API tối ưu hóa phần cứng của DPDK `rte_acl_classify()`.
-    *   Cập nhật các số liệu thống kê cục bộ trên mỗi core và hoàn trả mbuf về mempool theo lô (`rte_pktmbuf_free_bulk()`).
-*   **[matcher.c](file:///c:/Users/ADMIN/Desktop/coding/hpc-spi-classifier/src/matcher.c) / [matcher.h](file:///c:/Users/ADMIN/Desktop/coding/hpc-spi-classifier/src/matcher.h)**:
-    *   Thực hiện phân tích tệp cấu hình luật (hỗ trợ phân tích phần nhóm và bộ lọc định dạng CIDR).
-    *   Tích hợp thư viện **DPDK ACL** để ánh xạ luật 5-tuple thành cấu trúc trường `rte_acl_field_def` và biên dịch cây trie ACL (`rte_acl_build`).
-    *   Hiện thực hóa cơ chế đổi bảng luật động đệm kép (Double-Buffering): Nạp luật vào bảng đệm ẩn (shadow table), khởi tạo ACL context mới, sau đó thực hiện tráo đổi con trỏ bằng lệnh ghi nguyên tử đồng bộ bộ nhớ giải phóng (`atomic_store_explicit` với `memory_order_release`).
-*   **[parser.h](file:///c:/Users/ADMIN/Desktop/coding/hpc-spi-classifier/src/parser.h)**:
-    *   Thư viện header-only chứa hàm inline tối ưu hóa `parse_five_tuple()`.
-    *   Sử dụng con trỏ trỏ trực tiếp vào bộ đệm của mbuf (`rte_pktmbuf_mtod`) để đọc các tiêu đề Ethernet, VLAN (nếu có), IPv4, TCP/UDP mà không thực hiện sao chép vùng nhớ (Zero-Copy).
-*   **[control.c](file:///c:/Users/ADMIN/Desktop/coding/hpc-spi-classifier/src/control.c) / [control.h](file:///c:/Users/ADMIN/Desktop/coding/hpc-spi-classifier/src/control.h)**:
-    *   Tạo và quản lý một Unix Domain Socket độc lập tại đường dẫn `/tmp/spifast_ctrl.sock` thông qua luồng POSIX thread riêng nằm ngoài nhóm lcore của DPDK, đảm bảo không ảnh hưởng đến luồng xử lý gói tin tốc độ cao (data-path).
-    *   Tiếp nhận yêu cầu tải lại luật mạng từ CLI, kích hoạt hàm `matcher_reload()` và phản hồi trạng thái xử lý cho CLI.
-*   **[stats.c](file:///c:/Users/ADMIN/Desktop/coding/hpc-spi-classifier/src/stats.c) / [stats.h](file:///c:/Users/ADMIN/Desktop/coding/hpc-spi-classifier/src/stats.h)**:
-    *   Tổng hợp định kỳ (mỗi 1 giây) các số liệu thống kê từ Master Core và tất cả các Worker Cores.
-    *   Tính toán trực tiếp băng thông thời gian thực (Mbps), tốc độ xử lý gói tin (pps), tỷ lệ rớt gói (Packet Drop Rate), và tỷ lệ mất gói tin (Missing Packet Rate) để xuất ra màn hình điều khiển.
-*   **[spi_cli.c](file:///c:/Users/ADMIN/Desktop/coding/hpc-spi-classifier/src/spi_cli.c)**:
-    *   Chương trình dòng lệnh CLI độc lập (không phụ thuộc thư viện DPDK).
-    *   Được biên dịch để gửi thông điệp yêu cầu hot-reload tệp luật thông qua kết nối Unix Domain Socket tới tiến trình chính của ứng dụng.
-
-#### 6.5.2. Cơ chế kiểm tra tính đúng đắn qua Debug Mode (`DEBUG_MODE`)
-Khi ứng dụng được biên dịch với cờ `-DDEBUG_MODE` (sử dụng trong kịch bản kiểm tra tính đúng đắn thông qua script `run_check_correctness.sh`), hệ thống sẽ kích hoạt một cơ chế thu thập dữ liệu kiểm thử đặc biệt:
-
-1.  **Đánh chỉ số gói tin toàn cục**:
-    *   Trong cấu trúc [pkt_metadata_t](file:///c:/Users/ADMIN/Desktop/coding/hpc-spi-classifier/src/common.h#L36-L42), trường `packet_index` được kích hoạt để lưu trữ chỉ số thứ tự tuyệt đối của gói tin (bắt đầu từ `0`).
-    *   Khi nhận gói tin trong [master.c](file:///c:/Users/ADMIN/Desktop/coding/hpc-spi-classifier/src/master.c), Master Core sẽ gán chỉ số tăng dần này vào metadata của từng mbuf (`meta->packet_index = debug_packet_idx++`).
-2.  **Tự động nhận diện kết thúc luồng PCAP**:
-    *   Do ứng dụng chạy giả lập ngoại tuyến (Offline Simulation) đọc gói tin từ tệp tin PCAP ảo, khi tệp tin PCAP được đọc hết, hàm `rte_eth_rx_burst()` sẽ liên tục trả về `0`.
-    *   Trong chế độ Debug, nếu Master Core phát hiện có hơn `5,000,000` lần đọc trống liên tiếp sau khi đã bắt đầu nhận gói tin, nó sẽ hiểu rằng luồng PCAP đã kết thúc. Master Core sẽ thiết lập cờ `force_quit = true` để dừng toàn bộ ứng dụng một cách chủ động và an toàn.
-3.  **Ghi nhận kết quả phân loại chi tiết**:
-    *   Tại luồng [worker.c](file:///c:/Users/ADMIN/Desktop/coding/hpc-spi-classifier/src/worker.c) của **Worker Core 0**, một tệp tin kết quả kiểm thử định dạng CSV được tạo ra tại đường dẫn `tests/results/actual.csv` với tiêu đề cột `Packet_Index,Rule,Action`.
-    *   Với mỗi gói tin được phân loại bởi Worker Core 0, hệ thống sẽ ghi lại:
-        *   Chỉ số gói tin (`packet_index`).
-        *   Tên của luật bị khớp (hoặc `INVALID`/`DEFAULT` nếu gói tin không phân tích được hoặc không khớp luật nào).
-        *   Hành động tương ứng (`FORWARD` hoặc `DROP`).
-    *   Tệp `actual.csv` này sau đó sẽ được so khớp trực tiếp với tệp kết quả mong đợi (`expected.csv`) để kiểm tra độ chính xác phân loại của thuật toán so khớp.
-
 
 ### 6.5. Chi tiết mã nguồn từng file và Cơ chế Debug (`DEBUG_MODE`)
 
