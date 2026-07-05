@@ -75,7 +75,7 @@ int master_loop(struct rte_ring *worker_rings[], uint32_t num_workers, uint16_t 
 				target_worker = hash & (num_workers - 1); // Fast modulo for power of 2
 			} else {
 				meta->is_valid = 0;
-				// If not parsable, just distribute round robin
+				// If not parsable, distribute based on packet index in burst
 				target_worker = i & (num_workers - 1);
 			}
 			
