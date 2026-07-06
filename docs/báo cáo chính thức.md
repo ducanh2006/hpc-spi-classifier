@@ -61,7 +61,7 @@ Các đóng góp chính của dự án bao gồm:
      * 2.3.2. Thuật toán cân bằng tải động (Software RSS)
      * 2.3.3. Cơ chế cập nhật luật động đệm kép không khóa (Hot-Reload)
      * 2.3.4. Ánh xạ độ ưu tiên luật nghịch đảo trên DPDK ACL
-     * 2.3.5. Kỹ thuật nạp trước bộ nhớ (Memory Prefetching)
+     * 2.3.5. Tối ưu hóa cấu hình biên dịch (Compiler Optimization)
      * 2.3.6. Các kỹ thuật tối ưu hóa khác
 3. **III. Kết quả thực hiện và đánh giá**
    * 3.1. Cấu trúc tổ chức mã nguồn và các thành phần dự án
@@ -265,8 +265,11 @@ graph TD
 ### 2.3. Các thuật toán và kỹ thuật tối ưu hóa hiệu năng cao (HPC)
 
 #### 2.3.1. Phân tích tiêu đề mạng không sao chép (Zero-copy Parser)
-Hàm phân tích tiêu đề `parse_five_tuple()` được thiết kế inline (`always_inline`) với từ khóa `__restrict__` để tối ưu hóa trình biên dịch. Bộ phân tích sử dụng macro `rte_pktmbuf_mtod()` để lấy con trỏ trực tiếp đến vùng nhớ dữ liệu gói tin trong cấu trúc `rte_mbuf` được lưu tại Hugepages. Sau đó, nó thực hiện ép kiểu con trỏ (pointer casting) trực tiếp sang các cấu trúc tiêu đề mạng có sẵn của DPDK như `struct rte_ether_hdr`, `struct rte_vlan_hdr`, `struct rte_ipv4_hdr`, `struct rte_tcp_hdr` hoặc `struct rte_udp_hdr`.
-Quá trình này hoàn toàn không thực hiện bất kỳ lệnh sao chép dữ liệu byte (`memcpy`) nào, giúp tiết kiệm chu kỳ xung nhịp CPU tối đa. Đồng thời, bộ phân tích hỗ trợ nhận diện và bỏ qua tiêu đề VLAN (802.1Q) nếu có để trích xuất chính xác tiêu đề L3/L4 phía sau.
+Hàm `parse_five_tuple()` đóng vai trò là cửa ngõ đầu tiên trên luồng dữ liệu (Data Path) của Master Core. Do quá trình nhận gói tin thô và phân tích tiêu đề để phân tải diễn ra tuần tự trên duy nhất một nhân CPU (**Single Core** - Master Core) trước khi phân phối tới các Worker Cores, hàm này chính là **nút thắt cổ chai quyết định (Architectural Bottleneck)** hiệu năng của toàn bộ hệ thống. Bất kỳ sự trễ nào tại đây sẽ làm nghẽn hàng đợi nhận gói và gây rớt gói tin ngay lập tức. Vì vậy, bộ phân tích bắt buộc phải được tối ưu hóa cực độ theo nguyên lý **Zero-copy** và loại bỏ hoàn toàn chi phí gọi hàm (Function Call Overhead):
+*   **Truy cập bộ nhớ trực tiếp (Direct In-place Access):** Bộ phân tích sử dụng macro `rte_pktmbuf_mtod()` để lấy trực tiếp con trỏ trỏ tới vùng đệm dữ liệu gói tin trong cấu trúc `rte_mbuf` được lưu tại Hugepages. Thay vì sao chép dữ liệu (`memcpy`) ra một vùng nhớ tạm thời, hệ thống thực hiện ép kiểu con trỏ trực tiếp (Pointer Casting) sang các cấu trúc tiêu đề chuẩn của DPDK (`rte_ether_hdr`, `rte_ipv4_hdr`, `rte_tcp_hdr` / `rte_udp_hdr`) để đọc trực tiếp các trường thông tin.
+*   **Phép toán dịch con trỏ hiệu năng cao:** Tiêu đề L3 được định vị dựa trên kích thước tiêu đề L2 tĩnh (`sizeof`), trong khi tiêu đề L4 được xác định bằng cách cộng thêm độ dài tiêu đề IP động trích xuất trực tiếp từ trường IHL (Internet Header Length) của gói tin. Quy trình này hỗ trợ bóc tách và bỏ qua tiêu đề VLAN (802.1Q) động chỉ thông qua dịch chuyển offset mà không làm thay đổi hay sao chép cấu trúc gói.
+*   **Tối ưu hóa mức biên dịch:** Hàm `parse_five_tuple()` được khai báo `always_inline` kết hợp với từ khóa chỉ định độc quyền con trỏ `__restrict__`. Điều này bắt buộc trình biên dịch lồng trực tiếp mã nguồn của hàm vào vòng lặp chính của Master Core, giúp loại bỏ việc lưu trữ trạng thái thanh ghi khi gọi hàm, đồng thời cho phép trình biên dịch tối ưu hóa việc phân bổ thanh ghi tối đa cho các trường 5-tuple trích xuất được.
+
 
 #### 2.3.2. Thuật toán cân bằng tải động (Software RSS)
 Để tránh hiện tượng tranh chấp hàng đợi khi Master Core đẩy gói tin cho các Worker Core, hệ thống sử dụng thuật toán Cân bằng tải động bằng phần mềm (Software RSS):
@@ -341,20 +344,20 @@ Mốc offset `1000` được chọn vì:
 *   Nếu luật lọc không thuộc nhóm cụ thể nào, nó được gán precedence mặc định là `1000`. Khi đó, priority của nó trong DPDK ACL sẽ bằng $1000 - 1000 = 0$ (mức thấp nhất tuyệt đối), đảm bảo các luật cụ thể luôn đè lên luật mặc định.
 *   Khống chế precedence tối đa là 1000 đảm bảo giá trị priority luôn nằm trong khoảng an toàn $[0, 999]$, không bị tràn số ngược (Underflow) gây cuộn giá trị lên mức cực đại $4.294.967.295$ (vốn sẽ biến một luật ưu tiên thấp nhất thành cao nhất).
 
-#### 2.3.5. Kỹ thuật nạp trước bộ nhớ (Memory Prefetching)
-Nhằm che giấu độ trễ truy xuất bộ nhớ RAM vật lý (Memory Latency Overhead) vốn rất lớn so với tốc độ xử lý của CPU, hệ thống áp dụng kỹ thuật nạp trước dữ liệu:
-Trong vòng lặp xử lý burst gói tin của cả Master Core và Worker Cores, trước khi thao tác trên gói tin thứ $i$, luồng xử lý sẽ phát lệnh nạp trước (`rte_prefetch0`) tiêu đề gói tin và payload của gói tin thứ $i+4$ vào bộ nhớ đệm Cache L1 của CPU. Điều này giúp dữ liệu gói tin đã sẵn sàng trên Cache khi CPU thực hiện xử lý ở 4 vòng lặp kế tiếp, giảm thiểu tối đa hiện tượng nghẽn do đợi bộ nhớ (CPU Cache Miss).
+#### 2.3.5. Tối ưu hóa cấu hình biên dịch (Compiler Optimization)
+Để đạt hiệu năng thực thi tối đa trên cấu hình phần cứng đích, dự án được biên dịch với các cờ tối ưu hóa sâu tích hợp trong hệ thống build [meson.build](file:///c:/Users/ADMIN/Desktop/coding/hpc-spi-classifier/meson.build):
+*   **Link-Time Optimization (LTO - `b_lto=true`):** Kích hoạt tối ưu hóa tại thời điểm liên kết, cho phép trình biên dịch phân tích toàn cục dự án để thực hiện inline chéo (cross-module inlining) giữa các file nguồn độc lập và loại bỏ triệt để mã nguồn dư thừa (dead code).
+*   **Mức tối ưu hóa `-Ofast`:** Cấu hình mức tối ưu hóa cao nhất của GCC, tự động áp dụng các tối ưu hóa vector hóa SIMD và tính toán dấu phẩy động siêu tốc (fast-math).
+*   **Tối ưu hóa tập lệnh phần cứng (`-march=native` và `-mtune=native`):** Tạo mã máy tận dụng tối đa tập lệnh phần cứng của máy chủ chạy thử nghiệm (ví dụ: tập lệnh SIMD AVX2, AVX-512) và tối ưu độ trễ cache cụ thể của vi kiến trúc CPU hiện tại.
+*   **Mở rộng vòng lặp (`-funroll-loops`):** Chỉ thị trình biên dịch tự động mở các vòng lặp để giảm bớt chi phí kiểm tra điều kiện lặp, tăng khả năng xử lý song song mức lệnh (Instruction-Level Parallelism).
+*   **Căn lề địa chỉ hàm (`-falign-functions=64`):** Căn lề địa chỉ bắt đầu của các hàm tại biên 64-byte (bằng kích thước Cache Line). Nhờ đó, khi CPU nhảy tới thực thi một hàm mới, nó giảm thiểu được tỷ lệ trượt cache tập lệnh (Instruction Cache Miss).
+*   **Loại bỏ con trỏ khung hình (`-fomit-frame-pointer`):** Bỏ qua con trỏ khung hình trên thanh ghi `RBP` đối với các hàm không cần thiết, giúp giải phóng thêm một thanh ghi đa dụng cho trình biên dịch tùy ý tối ưu hóa hiệu năng tính toán.
 
 #### 2.3.6. Các kỹ thuật tối ưu hóa khác
 *   **Gợi ý rẽ nhánh (`likely()` và `unlikely()`):** Định nghĩa qua `__builtin_expect()` của GCC để hướng dẫn bộ dự đoán rẽ nhánh (Branch Predictor) của CPU. Đối với các trường hợp lỗi hoặc hiếm gặp (như sai định dạng gói tin, lỗi hàng đợi đầy), hệ thống đánh dấu `unlikely()`. Điều này giúp trình biên dịch tối ưu hóa cách sắp xếp mã máy (Instruction Placement), đặt các khối lệnh ít xảy ra ra ngoài luồng chạy chính, giảm thiểu bong bóng lệnh (pipeline bubbles) và hiện tượng trượt dự đoán rẽ nhánh.
 *   **Tối ưu hóa số học (Bitwise thay thế Modulo):** Sử dụng phép toán logic bit AND (`& (N - 1)`) thay cho phép toán chia dư (`% N`) trên CPU. Phép chia lấy dư thông thường tiêu tốn khoảng 30-80 chu kỳ xung nhịp CPU, trong khi phép logic AND chỉ tiêu tốn duy nhất 1 chu kỳ xung nhịp. Điều này hoạt động hoàn hảo khi số lượng Worker $N$ được thiết kế cố định là lũy thừa của 2.
-*   **Tối ưu hóa cấu hình biên dịch trong [meson.build](file:///c:/Users/ADMIN/Desktop/coding/hpc-spi-classifier/meson.build):**
-    *   **Link-Time Optimization (LTO - `b_lto=true`):** Kích hoạt tối ưu hóa tại thời điểm liên kết, cho phép trình biên dịch phân tích toàn cục dự án để tối ưu hóa việc inline chéo giữa các file nguồn độc lập và loại bỏ mã nguồn dư thừa (dead code).
-    *   **`-Ofast`:** Cấu hình mức tối ưu hóa cao nhất của GCC, tự động áp dụng các tối ưu hóa vector hóa và tính toán dấu phẩy động siêu tốc.
-    *   **`-march=native` và `-mtune=native`:** Tạo mã máy tận dụng tối đa tập lệnh phần cứng của máy chủ chạy thử nghiệm (ví dụ: tập lệnh SIMD AVX2, AVX-512) và tối ưu độ trễ cache cụ thể của vi kiến trúc CPU hiện tại.
-    *   **`-funroll-loops`:** Trình biên dịch tự động mở các vòng lặp để giảm bớt chi phí kiểm tra điều kiện lặp và tăng khả năng xử lý song song mức lệnh (Instruction-Level Parallelism).
-    *   **`-falign-functions=64`:** Căn lề địa chỉ bắt đầu của các hàm tại biên 64-byte (bằng kích thước Cache Line). Nhờ đó, khi CPU nhảy tới thực thi một hàm mới, nó sẽ giảm thiểu được tỷ lệ Cache Miss của tập lệnh (Instruction Cache Miss).
-    *   **`-fomit-frame-pointer`:** Bỏ qua con trỏ khung hình (Frame Pointer) trên thanh ghi `RBP` đối với các hàm không cần thiết, giúp giải phóng thêm một thanh ghi đa dụng cho trình biên dịch tùy ý tối ưu hóa hiệu năng tính toán.
+*   **Kỹ thuật nạp trước bộ nhớ (Memory Prefetching):** Nhằm che giấu độ trễ truy xuất bộ nhớ RAM vật lý (Memory Latency Overhead) vốn rất lớn so với tốc độ xử lý của CPU, hệ thống áp dụng kỹ thuật nạp trước dữ liệu: trong vòng lặp xử lý burst gói tin của cả Master Core và Worker Cores, trước khi thao tác trên gói tin thứ $i$, luồng xử lý sẽ phát lệnh nạp trước (`rte_prefetch0`) tiêu đề gói tin và payload của gói tin thứ $i+4$ vào bộ nhớ đệm Cache L1 của CPU. Điều này giúp dữ liệu gói tin đã sẵn sàng trên Cache khi CPU thực hiện xử lý ở 4 vòng lặp kế tiếp, giảm thiểu tối đa hiện tượng nghẽn do đợi bộ nhớ (CPU Cache Miss).
+
 
 ---
 
