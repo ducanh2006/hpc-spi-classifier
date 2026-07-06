@@ -2,7 +2,7 @@
 
 ## **SPIFast: High-Performance Shallow Packet Inspection (SPI) System Using DPDK**
 
-**Announced Testing Environment:** Runs directly on a single personal computer (Linux PC/Laptop), simulating the network using the PCAP Virtual Device (vdev) PMD mechanism without relying on physical discrete network cards.  
+**Announced Testing Environment:** Runs directly on a single personal computer (PC/Laptop Linux), simulating the network using the PCAP Virtual Device (vdev) PMD mechanism without relying on physical discrete network cards.  
 **Mentor:** Nguyen Ngoc Dung (Email: dungnn11@viettel.com.vn)
 
 # 1. Background
@@ -74,17 +74,19 @@ typedef struct {
 ## 4.1 Sample Configuration File (spi_rules.conf/ .config)
 
 ```text
-HTTP_TRAFFIC,TCP,*,*,*,80,FORWARD_WORKER_0
-HTTPS_TRAFFIC,TCP,*,*,*,443,FORWARD_WORKER_1
-DNS_TRAFFIC,UDP,*,*,*,53,FORWARD_WORKER_2
-GTPU_TRAFFIC,UDP,*,*,*,2152,FORWARD_WORKER_3
+HTTP_TRAFFIC,TCP,*,*,*,80,FORWARD
+HTTPS_TRAFFIC,TCP,*,*,*,443,FORWARD
+DNS_TRAFFIC,UDP,*,*,*,53,FORWARD
+GTPU_TRAFFIC,UDP,*,*,*,2152,FORWARD
 SSH_BLOCK,TCP,*,*,*,22,DROP
 DEFAULT,*,*,*,*,*,DROP
 ```
+
 ### CRITICAL ARCHITECTURE NOTE:
-* **Action Labels are Examples Only:** Labels like `FORWARD_WORKER_0` are purely illustrative; do NOT hard-code specific protocols or rules to fixed CPU cores.
-* **Mandatory Dynamic Load Balancing:** To meet Excellence KPIs (0% drop, 1.48Mpps), you must implement dynamic packet distribution (e.g., Lock-free Round-Robin, RSS Hash, or Shared Ring) across all active Workers. 
-* **Zero Bottlenecks:** Optimize for maximum CPU cache efficiency and ensure fluid, lock-free mbuf scheduling to eliminate ring congestion.
+* **Actions Consist Only of FORWARD or DROP:** Configuration rules will only contain two types of actions: `FORWARD` (forward the packet) or `DROP` (discard the packet). **ABSOLUTELY DO NOT** designate specific workers (such as `FORWARD_WORKER_0`, `FORWARD_WORKER_1`) in the rule file.
+* **Workers Have Identical Tasks:** All Worker Cores are completely identical and process **all types** of protocols (HTTP, HTTPS, DNS, SSH, GTPU, etc.). They must not be specialized or hard-coded so that each worker only handles a specific task. Every received packet will be **dynamically load-balanced** by the system among available workers.
+* **Dynamic Load Balancing:** To achieve Excellence KPIs (0% drop, 1.48Mpps), you must implement a dynamic packet distribution mechanism (e.g., lock-free Round-Robin, RSS Hash, or Shared Ring) across all active Workers instead of hard-coding rules to specific workers.
+* **Zero System Bottlenecks:** Optimize CPU cache efficiency (Cache line) to the maximum and ensure continuous, lock-free mbuf scheduling to eliminate queue congestion (ring congestion).
 
 # 5. Standards & Mandatory Performance Indicators (KPIs)
 
@@ -137,6 +139,27 @@ Students prepare a sample file 'traffic_sample.pcap' placed in the running direc
 - System analysis documentation clearly explaining the used DPDK API functions and the packet routing mapping diagram between CPU lcores.
 - Statistical table of actual run results on the machine printed from the application, clearly demonstrating that the system achieves the data classification KPIs (pps, Mbps) corresponding to the 1 Gbps network simulation environment.
 
-# 9. Important Notes*
-> **Regarding the Action configuration in the `spi_rules.conf` file:** > Action values such as `FORWARD_WORKER_0`, `FORWARD_WORKER_1`... in the sample file are merely **illustrative examples** to visualize the data flow.
-> The system **does not necessarily and is not required to hard-code** a specific protocol or network rule to a single processing Core. Students are encouraged to freely optimize performance using other advanced solutions, such as the **Dynamic Load Balancing** mechanism between Worker Cores (via Round-Robin, RSS Hash, or Shared Ring algorithms) to maximize CPU resource utilization and avoid packet drop phenomena.
+# 9. Real-time Configuration Reload Feature
+
+The project requires support for updating configuration rules while the application is running **without needing to stop or restart**. There are 2 implementation options:
+
+## 9.1 Option 1: Basic Approach
+
+Edit the rules directly on the text configuration file (`.conf` or `.txt`), then write a command-line tool (CLI) to invoke the `reload runtime` command to update the rules into the running system:
+
+```bash
+# Example CLI command to reload configuration
+./spi_cli reload_rules spi_rules.conf
+```
+
+**Advantages:** Simple, easy to implement, suitable for a mini project.  
+**Disadvantages:** Requires an IPC mechanism between the CLI tool and the main application (can use Unix socket or named pipe).
+
+## 9.2 Option 2: Advanced Approach
+
+Use 3rd party configuration tools like **Netconf** or **confd** to manage and update configurations in real-time.
+
+**Advantages:** Industry standard, supports configuration versioning, automatic change monitoring.  
+**Disadvantages:** More complex, requires installation of 3rd party tools.
+
+**Note:** This project encourages the use of **Option 1** to maintain simplicity and focus on the core of SPI classification. Option 2 is considered an Advanced Feature if there is time and a desire to explore further.

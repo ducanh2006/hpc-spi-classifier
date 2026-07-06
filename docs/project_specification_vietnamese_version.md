@@ -75,17 +75,18 @@ typedef struct {
 ## 4.1 File cấu hình mẫu (spi_rules.conf/ .config)
 
 ```text
-HTTP_TRAFFIC,TCP,*,*,*,80,FORWARD_WORKER_0
-HTTPS_TRAFFIC,TCP,*,*,*,443,FORWARD_WORKER_1
-DNS_TRAFFIC,UDP,*,*,*,53,FORWARD_WORKER_2
-GTPU_TRAFFIC,UDP,*,*,*,2152,FORWARD_WORKER_3
+HTTP_TRAFFIC,TCP,*,*,*,80,FORWARD
+HTTPS_TRAFFIC,TCP,*,*,*,443,FORWARD
+DNS_TRAFFIC,UDP,*,*,*,53,FORWARD
+GTPU_TRAFFIC,UDP,*,*,*,2152,FORWARD
 SSH_BLOCK,TCP,*,*,*,22,DROP
 DEFAULT,*,*,*,*,*,DROP
 ```
 
 ### LƯU Ý QUAN TRỌNG VỀ KIẾN TRÚC:
-* **Nhãn Hành Động Chỉ Là Ví Dụ Minh Họa:** Các nhãn như `FORWARD_WORKER_0` chỉ mang tính chất minh họa; TUYỆT ĐỐI KHÔNG gán cứng (hard-code) các giao thức hoặc quy tắc cố định vào từng lõi CPU cụ thể.
-* **Bắt Buộc Cân Bằng Tải Động:** Để đạt KPI Xuất Sắc (0% drop, 1.48Mpps), bạn phải triển khai cơ chế phân phối gói tin động (ví dụ: Vòng tròn luân phiên lock-free, RSS Hash, hoặc cấu trúc Shared Ring) trên toàn bộ các Worker đang hoạt động.
+* **Hành Động Chỉ Bao Gồm FORWARD Hoặc DROP:** Các luật cấu hình sẽ chỉ chứa hai loại hành động: `FORWARD` (chuyển tiếp gói tin) hoặc `DROP` (loại bỏ gói tin). **TUYỆT ĐỐI KHÔNG** chỉ định đích danh worker cụ thể (như `FORWARD_WORKER_0`, `FORWARD_WORKER_1`) trong file luật.
+* **Công Việc Của Các Worker Là Giống Nhau:** Tất cả các Worker Core sẽ hoàn toàn giống nhau và xử lý **tất cả các loại** giao thức (HTTP, HTTPS, DNS, SSH, GTPU, v.v.). Chúng không được chuyên môn hóa hay gán cứng mỗi worker chỉ xử lý một loại tác vụ cụ thể. Mỗi gói tin được nhận sẽ được hệ thống **phân tải động** giữa các worker đang rảnh.
+* **Cân Bằng Tải Động (Dynamic Load Balancing):** Để đạt KPI Xuất Sắc (0% drop, 1.48Mpps), bạn phải triển khai cơ chế phân phối gói tin động (ví dụ: Vòng tròn luân phiên lock-free - Round-Robin, RSS Hash, hoặc cấu trúc Shared Ring) trên toàn bộ các Worker đang hoạt động thay vì hard-code luật vào worker cụ thể.
 * **Không Gây Nghẽn Hệ Thống:** Tối ưu hóa hiệu suất bộ đệm CPU (Cache line) ở mức tối đa và đảm bảo việc điều phối các mbuf diễn ra liên tục, lock-free nhằm xóa bỏ tình trạng nghẽn hàng đợi (ring congestion).
 
 # 5. Tiêu chuẩn & Chỉ số hiệu năng bắt buộc (KPIs)
@@ -140,6 +141,27 @@ Sinh viên chuẩn bị một file mẫu 'traffic_sample.pcap' đặt tại thư
 - Bảng thống kê kết quả chạy thực tế trên máy in ra từ ứng dụng, minh chứng rõ ràng việc hệ thống đạt được KPIs phân loại dữ liệu (pps, Mbps) tương ứng với môi trường giả lập mạng 1 Gbps.
 
 
-# 9. Lưu ý quan trọng*
-> **Về cấu hình Action trong file `spi_rules.conf`:** > Các giá trị hành động như `FORWARD_WORKER_0`, `FORWARD_WORKER_1`... trong file mẫu chỉ mang tính chất **ví dụ minh họa** để hình dung luồng đi của dữ liệu.
-> Hệ thống **không nhất thiết và không bắt buộc phải gán cứng** cố định một giao thức hay một luật mạng vào một Core xử lý duy nhất. Học viên được khuyến khích tự do tối ưu hóa hiệu năng bằng các giải pháp nâng cao khác, ví dụ như cơ chế **Cân bằng tải động (Dynamic Load Balancing)** giữa các Worker Core (qua thuật toán Round-Robin, RSS Hash, hoặc Shared Ring) nhằm tận dụng tối đa tài nguyên CPU và tránh hiện tượng rơi gói tin (Packet Drop).
+# 9. Tính năng cập nhật cấu hình theo thời gian thực (Realtime Configuration Reload)
+
+Dự án yêu cầu hỗ trợ cập nhật luật cấu hình trong khi ứng dụng đang chạy mà **không cần phải dừng hoặc khởi động lại**. Có 2 phương án triển khai:
+
+## 9.1 Phương án 1: Cấp Độ Cơ Bản (Basic Approach)
+
+Chỉnh sửa các luật trực tiếp trên file cấu hình text (`.conf` hoặc `.txt`), sau đó viết một công cụ dòng lệnh (CLI) để gọi lệnh `reload runtime` cập nhật các luật vào hệ thống đang chạy:
+
+```bash
+# Ví dụ gọi lệnh CLI để reload cấu hình
+./spi_cli reload_rules spi_rules.conf
+```
+
+**Ưu điểm:** Đơn giản, dễ hiện thực, phù hợp cho mini project.  
+**Nhược điểm:** Cần cơ chế IPC giữa CLI tool và ứng dụng chính (có thể dùng Unix socket hoặc named pipe).
+
+## 9.2 Phương án 2: Cấp Độ Nâng Cao (Advanced Approach)
+
+Sử dụng các công cụ cấu hình của bên thứ 3 như **Netconf** hoặc **confd** để quản lý và cập nhật cấu hình theo thời gian thực.
+
+**Ưu điểm:** Chuẩn mực công nghiệp, hỗ trợ phiên bản cấu hình, giám sát thay đổi tự động.  
+**Nhược điểm:** Phức tạp hơn, yêu cầu cài đặt thêm công cụ bên thứ 3.
+
+**Lưu ý:** Dự án này khuyến khích sử dụng **Phương án 1** để giữ tính đơn giản và tập trung vào lõi của SPI classification. Phương án 2 được coi là nâng cao (Advanced Feature) nếu có thời gian và muốn tìm hiểu thêm.

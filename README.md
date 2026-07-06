@@ -206,8 +206,8 @@ Trước khi thực hiện đo kiểm hiệu năng, hệ thống đã phải vư
 
 | Tiêu chí (Metric) | Kết quả (Value) |
 | :--- | :--- |
-| **Tổng số gói tin (Total Packets)** | 239 |
-| **Phân loại khớp (Matched)** | 239 |
+| **Tổng số gói tin (Total Packets)** | 329 |
+| **Phân loại khớp (Matched)** | 329 |
 | **Bỏ sót (Missing)** | 0 |
 | **Sai lệch (Mismatched)** | 0 |
 | **Độ chính xác (Accuracy)** | **100.00%** |
