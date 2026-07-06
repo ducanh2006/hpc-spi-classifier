@@ -1,7 +1,6 @@
 #include "master.h"
 #include "common.h"
 #include "stats.h"
-#include "parser.h"
 #include <rte_ethdev.h>
 #include <rte_jhash.h>
 #include <rte_lcore.h>
@@ -55,29 +54,16 @@ int master_loop(struct rte_ring *worker_rings[], uint32_t num_workers, uint16_t 
 		for (uint16_t i = 0; i < nb_rx; i++) {
 			if (likely(i + 4 < nb_rx)) {
 				rte_prefetch0(bufs[i + 4]);
-				rte_prefetch0(rte_pktmbuf_mtod(bufs[i + 4], void *));
 			}
 
 			struct rte_mbuf *m = bufs[i];
 			total_rx_bytes += rte_pktmbuf_pkt_len(m);
 			
-			pkt_metadata_t *meta = (pkt_metadata_t *)rte_mbuf_to_priv(m);
 #ifdef DEBUG_MODE
+			pkt_metadata_t *meta = (pkt_metadata_t *)rte_mbuf_to_priv(m);
 			meta->packet_index = debug_packet_idx++;
 #endif
-			uint32_t target_worker = 0;
-			
-			if (likely(parse_five_tuple(m, &meta->tuple))) {
-				meta->is_valid = 1;
-				uint32_t hash = rte_jhash_3words(meta->tuple.src_ip, meta->tuple.dst_ip,
-					((uint32_t)meta->tuple.src_port << 16) | meta->tuple.dst_port,
-					meta->tuple.protocol);
-				target_worker = hash & (num_workers - 1); // Fast modulo for power of 2
-			} else {
-				meta->is_valid = 0;
-				// If not parsable, just distribute round robin
-				target_worker = i & (num_workers - 1);
-			}
+			uint32_t target_worker = i & (num_workers - 1);
 			
 			worker_bufs[target_worker][worker_buf_count[target_worker]++] = m;
 		}

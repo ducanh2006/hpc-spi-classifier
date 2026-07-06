@@ -74,13 +74,15 @@ int worker_loop(void *arg)
 			w_rx_bytes += rte_pktmbuf_pkt_len(m);
 
 			pkt_metadata_t *meta = (pkt_metadata_t *)rte_mbuf_to_priv(m);
-			if (likely(meta->is_valid)) {
+			if (likely(parse_five_tuple(m, &meta->tuple))) {
+				meta->is_valid = 1;
 				data_ptrs[num_valid] = (const uint8_t *)&meta->tuple;
 #ifdef DEBUG_MODE
 				valid_indices[num_valid] = i;
 #endif
 				num_valid++;
 			} else {
+				meta->is_valid = 0;
 				w_drop_pkts++;
 #ifdef DEBUG_MODE
 				if (debug_fp) {
