@@ -131,8 +131,36 @@ def random_mac():
         random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)
     )
 
-def generate_balanced_traffic(output_dir="."):
-    scenario_name = "balanced_traffic"
+def get_unbalanced_weights(num_categories):
+    """
+    Generate weights according to the geometric distribution:
+    - Level 0 (1 rule): occupies 50% total (50% each)
+    - Level 1 (2 rules): occupies 25% total (12.5% each)
+    - Level 2 (4 rules): occupies 12.5% total (3.125% each)
+    - Level 3 (8 rules): occupies 6.25% total (0.78125% each)
+    etc.
+    """
+    weights = []
+    current_idx = 0
+    k = 0
+    while current_idx < num_categories:
+        num_rules_at_level = 2**k
+        weight_per_rule = 1.0 / (2.0 * (4.0**k))
+        for _ in range(num_rules_at_level):
+            if current_idx < num_categories:
+                weights.append(weight_per_rule)
+                current_idx += 1
+            else:
+                break
+        k += 1
+    
+    # Normalize weights so they sum to 1.0
+    total_weight = sum(weights)
+    normalized_weights = [w / total_weight for w in weights]
+    return normalized_weights
+
+def generate_unbalanced_traffic(output_dir="."):
+    scenario_name = "unbalanced_traffic"
     pcap_filename = os.path.join(output_dir, "pcap", f"{scenario_name}.pcap")
     csv_filename = os.path.join(output_dir, "csv", f"{scenario_name}_map.csv")
     conf_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "spi_rules.conf")
@@ -148,6 +176,15 @@ def generate_balanced_traffic(output_dir="."):
         {"name": "DEFAULT_DROP", "protocol": 6, "src_ip": 0, "src_mask": 0, "dst_ip": 0, "dst_mask": 0, "src_port": 0, "dst_port": 9999, "action": "DROP", "proto_str": "TCP"}, # DEFAULT
     ]
     
+    # Total categories: len(rules) active rules, plus 1 category for unmatched/drop traffic
+    num_categories = len(rules) + 1
+    normalized_weights = get_unbalanced_weights(num_categories)
+    
+    print("Traffic distribution weights:")
+    for idx in range(len(rules)):
+        print(f"  Rule [{rules[idx]['name']}]: {normalized_weights[idx] * 100:.4f}%")
+    print(f"  Unmatched Category (DEFAULT_DROP): {normalized_weights[-1] * 100:.4f}%")
+    
     print(f"Generating dataset: {pcap_filename}")
     
     with PcapWriter(pcap_filename, append=False, sync=False) as pcap_writer, \
@@ -156,13 +193,14 @@ def generate_balanced_traffic(output_dir="."):
         csv_writer = csv.writer(csv_file)
         csv_writer.writerow(["Packet_Index", "Expected_Rule", "Expected_Action"])
         
+        # Pre-select all categories using the calculated weights
+        categories = list(range(num_categories))
+        
         for i in range(PACKET_COUNT):
             if i % 100000 == 0:
                 print(f"  ... generated {i} packets")
                 
-            # Distribute packets equally: 1 slot for each loaded rule, plus 1 slot for unmatched (drop)
-            # This ensures every active rule has an equal probability of being matched!
-            category_idx = random.randint(0, len(rules))
+            category_idx = random.choices(categories, weights=normalized_weights, k=1)[0]
             
             if category_idx < len(rules):
                 rule = rules[category_idx]
@@ -227,4 +265,4 @@ def generate_balanced_traffic(output_dir="."):
 
 if __name__ == "__main__":
     output_directory = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data")
-    generate_balanced_traffic(output_dir=output_directory)
+    generate_unbalanced_traffic(output_dir=output_directory)

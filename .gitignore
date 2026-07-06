@@ -1,4 +1,6 @@
 third_party/*
 tests/data/*
+tests/results/
+tests/archive/
 venv/*
 *.txt
