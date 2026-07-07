@@ -1,0 +1,6 @@
+Test_Type,Metric,Value
+Functional,Total Packets,329
+Functional,Matched,329
+Functional,Missing,0
+Functional,Mismatched,0
+Functional,Accuracy,100.00%

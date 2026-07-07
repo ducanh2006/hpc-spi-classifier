@@ -1,0 +1,6 @@
+PCAP_File,Throughput_Mbps,Flow_Rate_pps,Master_Drop_Packets,Worker_Drop_Packets
+balanced_traffic.pcap,0.00,0,0,0
+func_test.pcap,15469.80,28521267,0,137838276
+http.pcap,45880.05,27705344,19285210,0
+tls13-rfc8446.pcap,48688.00,20152320,0,148817118
+unbalanced_traffic.pcap,0.00,0,0,0
